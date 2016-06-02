@@ -24,6 +24,7 @@
     "nodemon": "^1.9.2"
   },
   "dependencies": {
-    "three": "^0.77.1"
+    "three": "^0.77.1",
+    "underscore": "^1.8.3"
   }
 }
