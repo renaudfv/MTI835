@@ -49,10 +49,11 @@ document.addEventListener("DOMContentLoaded", function() {
         q: 'erased tapes'
     }).then(function(tracks){
         console.log(tracks);
-        // SC.stream(tracks[0].uri).then(function(player){
-        //     trackPlayer = player;
-        // });
-        renderHome();
+        // // SC.stream(tracks[0].uri).then(function(player){
+        // //     trackPlayer = player;
+        // // });
+        // renderHome();
+        // STOCKER LES TRACKS et LOADER LA TRACK par HTTP lors de la lecture avec WEB AUDIO API
     });
 
     // renderHome();
