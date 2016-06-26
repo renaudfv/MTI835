@@ -39,7 +39,8 @@ function renderHome(tracks) {
     var geometry, mesh, material, texture;
 
     var loader = new THREE.TextureLoader();
-
+    loader.crossOrigin = true; // otherwise image wont be usable and therefore visible
+   
     _.each(tracks, function(track) {
 
         // Load track image or avatar url if none
@@ -47,35 +48,13 @@ function renderHome(tracks) {
         texture = loader.load( imageUrl );
         console.log(texture)
 
-        material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
+        material = new THREE.MeshBasicMaterial( { map: texture } );
 
         geometry = new THREE.PlaneGeometry( 500, 500 );
         mesh = new THREE.Mesh( geometry, material );
-
+        mesh.lookAt(camera.position);
         tracksGroup.add( mesh )
         
-        // loader.load( imageUrl, function ( texture ) {
-        //     console.log(texture)
-        //     // do something with the texture
-        //     material = new THREE.MeshBasicMaterial( {
-        //         map: texture
-        //     } );
-
-        //     geometry = new THREE.PlaneGeometry( 500, 500 );
-        //     mesh = new THREE.Mesh( geometry, material );
-
-        //     tracksGroup.add( mesh );
-
-        // }, function ( xhr ) {
-        //     //Loading
-        //     console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
-
-        // }, function ( xhr ) {
-        //     // Error
-        //     console.log( 'An error happened' );
-
-        // } );
-
     });
 
     tracksGroup.translateZ(-3000);
@@ -116,6 +95,10 @@ function rotateCamera(event) {
     camera.rotation.x = - mouseScreenRatioX * PI / 2;
 
 }
+
+document.getElementById('c-logo').addEventListener("click", function() {
+    
+});
 
 document.addEventListener("DOMContentLoaded", function() {
 

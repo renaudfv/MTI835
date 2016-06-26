@@ -1,12 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset=utf-8>
-  <title>MTI835</title>
-  <link rel="stylesheet" type="text/css" href="style.css">
-  <script src="https://connect.soundcloud.com/sdk/sdk-3.1.1.js"></script>
+	<meta charset=utf-8>
+	<title>MTI835</title>
+	<link rel="stylesheet" type="text/css" href="style.css">
+	<script src="dist/sdk-3.1.1.js"></script>
+	<style type="text/css">
+		#c-logo {
+			z-index: 1;
+			position: absolute;
+			bottom: 20px;
+			right: 20px;
+			cursor: pointer;
+		}
+	</style>
 </head>
 <body>
-  <script type="text/javascript" src="dist/index.js"></script>
+	<img id="c-logo" src="logo-cardboard-white.svg">
+	<script type="text/javascript" src="dist/index.js"></script>
 </body>
 </html>

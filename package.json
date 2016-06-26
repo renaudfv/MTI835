@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "open ./index.html && npm run watch",
+    "start": "http-server",
     "build": "browserify -e src/index.js -o dist/index.js",
     "watch": "nodemon --watch src/index.js -x 'npm run build'",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -21,6 +21,7 @@
   "homepage": "https://github.com/renaudfv/MTI835#readme",
   "devDependencies": {
     "browserify": "^13.0.1",
+    "http-server": "^0.9.0",
     "nodemon": "^1.9.2"
   },
   "dependencies": {
