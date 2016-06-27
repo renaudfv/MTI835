@@ -3,10 +3,13 @@ var _ = require('underscore');
 
 var PI = Math.PI;
 
-var scene, camera, ambientLight;
+var scene, camera, tracksGroup;
 
 var renderer = new THREE.WebGLRenderer( { antialias: true } );
-trackPlayer = undefined;
+
+var fovHor = 55;
+var fovVer = 40;
+
 
 // Renders and update with browser refresh rate
 function render() {
@@ -18,47 +21,49 @@ function renderHome(tracks) {
 
     scene = new THREE.Scene();
 
-    camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 10000 );
-    // camera.position.z = 0;
-    camera.rotation.Z = Math.PI/6;
-    
-    var tracksGroup = new THREE.Object3D();
+    camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
+
+    tracksGroup = new THREE.Object3D();
+    // tracksGroup.translateZ(-3000);
+    // tracksGroup.lookAt( camera.position );
     scene.add( tracksGroup );
-
-
-    // ambientLight = new THREE.AmbientLight(0xbbbbbb);
-    // scene.add(ambientLight);
-
-    // geometry = new THREE.BoxGeometry( 500, 500, 1 );
-    // material = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
-
-    // mesh = new THREE.Mesh( geometry, material );
-    // scene.add( mesh );
 
     var imageUrl = '';
     var geometry, mesh, material, texture;
 
     var loader = new THREE.TextureLoader();
     loader.crossOrigin = true; // otherwise image wont be usable and therefore visible
-   
-    _.each(tracks, function(track) {
 
-        // Load track image or avatar url if none
-        imageUrl = ( !!track.artwork_url ) ? track.artwork_url : track.user.avatar_url;
-        texture = loader.load( imageUrl );
-        console.log(texture)
+    var track;
+    // 5 Columns 
+    for(var y = 0; y < 3; y++) {
 
-        material = new THREE.MeshBasicMaterial( { map: texture } );
+        // 3 Rows
+        for(var x = 0; x < 5; x++) {
+            track = tracks[x + y];
 
-        geometry = new THREE.PlaneGeometry( 500, 500 );
-        mesh = new THREE.Mesh( geometry, material );
-        mesh.lookAt(camera.position);
-        tracksGroup.add( mesh )
-        
-    });
+            // Load track image or avatar url if none
+            imageUrl = ( !!track.artwork_url ) ? track.artwork_url : track.user.avatar_url;
+            texture = loader.load( imageUrl );
 
-    tracksGroup.translateZ(-3000);
-    tracksGroup.lookAt(camera.position);
+            material = new THREE.MeshBasicMaterial( { map: texture } );
+            // material.side(THREE.DoubleSide);
+
+            geometry = new THREE.PlaneGeometry( 500, 500 );
+            mesh = new THREE.Mesh( geometry, material );
+            
+            // Post multiplication, meaning z translate is done first
+            mesh.rotateY( (x - 2) * fovHor / 360 * PI ); // from -55 to 55 deg to rads
+            mesh.rotateX( (y - 1) * fovVer / 360 * PI ); // from -10 to 10 deg to rads
+            mesh.translateZ( -3000 );
+            
+            tracksGroup.add( mesh );
+
+            mesh.track = track; // to access upon raycast
+        }
+
+    }
+
     render();
 } 
 
@@ -81,18 +86,21 @@ function windowResize(){
 window.addEventListener("mousemove", rotateCamera); 
 
 var mouseScreenRatioY = 0, mouseScreenRatioX = 0;
-
 function rotateCamera(event) {
 
-    // Convert mouse X position between -PI/3 and PI/3 for horizontal rotation (120˚ FOV) 
-    // has been optimized/factorized from prevision, formula might seem odd
-    mouseScreenRatioY = 2 * event.clientX / window.innerWidth - 1; 
-    camera.rotation.y = - mouseScreenRatioY * PI / 3;
-    
-    // Convert mouse Y position between -PI/2 and PI/2 for vertical rotation (90˚ FOV)
-    // has been optimized/factorized from prevision, formula might seem odd
-    mouseScreenRatioX = 2 * event.clientY / window.innerHeight - 1;
-    camera.rotation.x = - mouseScreenRatioX * PI / 2;
+    if(!!camera) {
+
+        // Convert mouse X position between -PI/3 and PI/3 for horizontal rotation (120˚ FOV) 
+        // has been optimized/factorized from prevision, formula might seem odd
+        mouseScreenRatioY = 2 * event.clientX / window.innerWidth - 1; 
+        tracksGroup.rotation.y =  mouseScreenRatioY * (2 * fovHor) / 360 * PI;
+        
+        // Convert mouse Y position between -PI/2 and PI/2 for vertical rotation (90˚ FOV)
+        // has been optimized/factorized from prevision, formula might seem odd
+        mouseScreenRatioX = 2 * event.clientY / window.innerHeight - 1;
+        tracksGroup.rotation.x =  mouseScreenRatioX * (fovVer + 10) / 360 * PI;
+
+    }
 
 }
 
@@ -111,16 +119,14 @@ document.addEventListener("DOMContentLoaded", function() {
     renderer.setSize( window.innerWidth, window.innerHeight );
     document.body.appendChild( renderer.domElement ); 
 
+    //Ask for more tracks just in cas SC sends less
     SC.get('/tracks', {
-        q: 'erased tapes'
+        q: 'erased tapes',
+        limit: 20
     }).then(function(tracks){
-        // // SC.stream(tracks[0].uri).then(function(player){
-        // //     trackPlayer = player;
-        // // });
+
         renderHome(tracks);
-        rotate();
         // STOCKER LES TRACKS et LOADER LA TRACK par HTTP lors de la lecture avec WEB AUDIO API
     });
 
-    // renderHome();
 });
