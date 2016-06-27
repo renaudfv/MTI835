@@ -79,7 +79,6 @@ function renderHome(tracks) {
 function renderTrack(track) {
 
     // Track scene rendering
-
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
@@ -99,24 +98,34 @@ function renderTrack(track) {
     mesh = new THREE.Mesh( geometry, material );
             
     mesh.translateZ( -3000 );
-    scene.add( mesh );
 
-    var audio = new Audio()
 
     url = track.stream_url + '?client_id=c1da0911d3af90cfd3153d5c6d030137';
 
-    audio.src = url;
-    var source = context.createMediaElementSource(audio);
-    
-    var gainNode = context.createGain();
-    gainNode.gain.value = 1;
-    
-    source.connect( gainNode );
-    gainNode.connect( context.destination );
+    var request = new XMLHttpRequest();
+    request.open('GET', url, true);
+    request.responseType = 'arraybuffer';
 
-    audio.play();
+    // Decode asynchronously
+    request.onload = function() {
+        console.log('loading request')
+        // DSP should all be done here as JS is asynchronous
+        context.decodeAudioData(request.response, function(buffer) {
+            console.log(buffer);
+            var source = context.createBufferSource();
+            source.buffer = buffer;
 
-    render();
+            source.connect( context.destination );
+            source.start();
+            // render if resquest is sucessfull
+            scene.add( mesh );
+            render();
+        }, function() {
+            throw new Error();
+        });
+    }
+    request.send();
+    
 }
 
 window.addEventListener( 'resize', windowResize);
