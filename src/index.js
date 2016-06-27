@@ -7,6 +7,12 @@ var scene, camera, tracksGroup;
 
 var renderer = new THREE.WebGLRenderer( { antialias: true } );
 
+// Keeps tracks of mouse coordinates, see https://github.com/mrdoob/three.js/blob/master/examples/webgl_interactive_buffergeometry.html
+var mouse = new THREE.Vector2();
+
+var raycaster = new THREE.Raycaster();
+
+// Globals for field-of-views
 var fovHor = 55;
 var fovVer = 40;
 
@@ -71,6 +77,10 @@ function renderTrack() {
 
     // Track scene rendering
 
+    scene = new THREE.Scene();
+
+    camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
+
 }
 
 window.addEventListener( 'resize', windowResize);
@@ -83,29 +93,46 @@ function windowResize(){
     renderer.setSize( window.innerWidth, window.innerHeight );
 }
 
-window.addEventListener("mousemove", rotateCamera); 
+window.addEventListener("mousemove", onMouseMove); 
 
 var mouseScreenRatioY = 0, mouseScreenRatioX = 0;
-function rotateCamera(event) {
+function onMouseMove(event) {
 
-    if(!!camera) {
+    mouseScreenRatioY = 2 * event.clientX / window.innerWidth - 1; 
+    mouseScreenRatioX = 2 * event.clientY / window.innerHeight - 1;
+    
+    // Rotate tracksGroup as if camera follows cursor
+    if(!!tracksGroup) {
 
-        // Convert mouse X position between -PI/3 and PI/3 for horizontal rotation (120˚ FOV) 
+        // /vert mouse X position between -PI/3 and PI/3 for horizontal rotation (120˚ FOV) 
         // has been optimized/factorized from prevision, formula might seem odd
-        mouseScreenRatioY = 2 * event.clientX / window.innerWidth - 1; 
         tracksGroup.rotation.y =  mouseScreenRatioY * (2 * fovHor) / 360 * PI;
         
         // Convert mouse Y position between -PI/2 and PI/2 for vertical rotation (90˚ FOV)
         // has been optimized/factorized from prevision, formula might seem odd
-        mouseScreenRatioX = 2 * event.clientY / window.innerHeight - 1;
         tracksGroup.rotation.x =  mouseScreenRatioX * (fovVer + 10) / 360 * PI;
 
     }
 
+    // Update mouse coordinates
+    mouse.x = mouseScreenRatioY;
+    mouse.y = - mouseScreenRatioX;
 }
 
-document.getElementById('c-logo').addEventListener("click", function() {
+window.addEventListener("click", function() {
+    console.log('CLICK');
     
+    raycaster.setFromCamera( mouse, camera );
+    var intersects = raycaster.intersectObject( tracksGroup, true ); // true makes it recursive
+
+    var mesh = intersects[0].object;
+    var track = mesh.track;
+
+    console.log( track );
+});
+
+document.getElementById('c-logo').addEventListener("click", function() {
+
 });
 
 document.addEventListener("DOMContentLoaded", function() {
