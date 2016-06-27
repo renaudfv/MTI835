@@ -1,5 +1,6 @@
 var THREE = require('three');
 var _ = require('underscore');
+var SC = require('soundcloud');
 
 var PI = Math.PI;
 
@@ -16,6 +17,8 @@ var raycaster = new THREE.Raycaster();
 var fovHor = 55;
 var fovVer = 40;
 
+// Web audio context
+var context = new ( window.AudioContext || window.webkitAudioContext );
 
 // Renders and update with browser refresh rate
 function render() {
@@ -73,7 +76,7 @@ function renderHome(tracks) {
     render();
 } 
 
-function renderTrack() {
+function renderTrack(track) {
 
     // Track scene rendering
 
@@ -81,6 +84,39 @@ function renderTrack() {
 
     camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
 
+    var imageUrl = '';
+    var geometry, mesh, material, texture;
+
+    var loader = new THREE.TextureLoader();
+    loader.crossOrigin = true; // otherwise image wont be usable and therefore visible
+
+    imageUrl = ( !!track.artwork_url ) ? track.artwork_url : track.user.avatar_url;
+    texture = loader.load( imageUrl );
+
+    material = new THREE.MeshBasicMaterial( { map: texture } );
+
+    geometry = new THREE.PlaneGeometry( 500, 500 );
+    mesh = new THREE.Mesh( geometry, material );
+            
+    mesh.translateZ( -3000 );
+    scene.add( mesh );
+
+    var audio = new Audio()
+
+    url = track.stream_url + '?client_id=c1da0911d3af90cfd3153d5c6d030137';
+
+    audio.src = url;
+    var source = context.createMediaElementSource(audio);
+    
+    var gainNode = context.createGain();
+    gainNode.gain.value = 1;
+    
+    source.connect( gainNode );
+    gainNode.connect( context.destination );
+
+    audio.play();
+
+    render();
 }
 
 window.addEventListener( 'resize', windowResize);
@@ -129,6 +165,7 @@ window.addEventListener("click", function() {
     var track = mesh.track;
 
     console.log( track );
+    renderTrack( track );
 });
 
 document.getElementById('c-logo').addEventListener("click", function() {

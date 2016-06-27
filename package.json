@@ -25,6 +25,7 @@
     "nodemon": "^1.9.2"
   },
   "dependencies": {
+    "soundcloud": "^3.1.2",
     "three": "^0.77.1",
     "underscore": "^1.8.3"
   }
