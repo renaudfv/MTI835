@@ -166,19 +166,52 @@ function renderTrack(track) {
     
 }
 
+var cursorAnimationInterval;
+var animationIndex = 1;
+var previousObject;
+
 function pickOnMove() {
     raycaster.setFromCamera( new THREE.Vector2(0, 0), camera );
     var intersects = raycaster.intersectObject( tracksGroup, true ); // true makes it recursive
-    console.log(intersects)
+    
     if(intersects.length > 0) {
-
         var mesh = intersects[0].object;
         var track = mesh.track;
+        clearInterval( cursorAnimationInterval );
 
-        // renderTrack( track );
+        previousObject = mesh;
+
         cursor.position.z = -2000;
+        cursor.material.transparent = true;
+        cursor.material.opacity = 1;
+
+        cursorAnimationInterval = setInterval(function() {
+
+            animationIndex += 0.05;
+                cursor.position.z = -2000 * 1 / animationIndex;
+                cursor.material.opacity = 1 / (animationIndex + 0.5);
+
+                mesh.translateZ(-10);
+
+                if(animationIndex > Math.round(6))  {
+                    clearInterval( cursorAnimationInterval );
+                    animationIndex = 1;
+                    renderTrack(track);
+                }
+
+            }, 30);
+
     } else {
+        clearInterval( cursorAnimationInterval );
+
+        //Restore everything
+        if(!!previousObject)
+            previousObject.translateZ( (animationIndex - 1) / 0.05 * 10 );
+
+        animationIndex = 1;
         cursor.position.z = -4000;
+        previousObject = undefined; 
+
     }
 }
 
