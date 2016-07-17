@@ -43686,14 +43686,15 @@ window.addEventListener("click", function() {
 
 });
 
-document.getElementById('c-logo').addEventListener("click", function() {
-    console.log('make it stereo');
-    if(!toggleStereo) {
+function handleStereoToggle() {
+    document.getElementById('c-logo').addEventListener("click", function() {
+        console.log('make it stereo');
+        if(!toggleStereo) {
 
-        if(!effect)
-            effect = new THREE.StereoEffect( renderer );
+            if(!effect)
+                effect = new THREE.StereoEffect( renderer );
 
-        effect.setSize( window.innerWidth, window.innerHeight );
+            effect.setSize( window.innerWidth, window.innerHeight );
 
         //Hide mouse
         document.getElementsByTagName('canvas')[0].style.cursor = 'none';
@@ -43723,6 +43724,8 @@ document.getElementById('c-logo').addEventListener("click", function() {
         render();
     }
 });
+}
+
 
 function requestFullscreen() {
     if (container.requestFullscreen) {
@@ -43767,6 +43770,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }).then(function(tracks){
 
         renderHome(tracks);
+        handleStereoToggle();
         // STOCKER LES TRACKS et LOADER LA TRACK par HTTP lors de la lecture avec WEB AUDIO API
     });
 
