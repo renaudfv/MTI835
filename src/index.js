@@ -1,12 +1,21 @@
-var THREE = require('three');
+THREE = require('three');
 var _ = require('underscore');
 var SC = require('soundcloud');
+// from http://vr.chromeexperiments.com/
+var StereoEffect = require('../libs/threejs-vr/StereoEffect.js');
+THREE.StereoEffect = StereoEffect;
 
 var PI = Math.PI;
 
-var scene, camera, tracksGroup;
+var scene, camera, tracksGroup, effect, cursor;
 
+//WebGL rendering engine
 var renderer = new THREE.WebGLRenderer( { antialias: true } );
+renderer.setPixelRatio( window.devicePixelRatio );
+
+//Used for fullscreen
+var container = document.body;
+container.appendChild(renderer.domElement);
 
 // Keeps tracks of mouse coordinates, see https://github.com/mrdoob/three.js/blob/master/examples/webgl_interactive_buffergeometry.html
 var mouse = new THREE.Vector2();
@@ -17,26 +26,50 @@ var raycaster = new THREE.Raycaster();
 var fovHor = 55;
 var fovVer = 40;
 
+var toggleStereo = false;
+var toggleTrack = false;
+
 // Web audio context
 var context = new ( window.AudioContext || window.webkitAudioContext );
 
 // Renders and update with browser refresh rate
 function render() {
     requestAnimationFrame( render );
-    renderer.render( scene, camera );
+    if(!toggleStereo)
+        renderer.render( scene, camera );
+    else 
+        effect.render( scene, camera );
+}
+
+// Camera center cursor for VR context
+function renderCursor() {
+    var geometry = new THREE.CircleGeometry( 40, 100 );
+    var mat = new THREE.MeshBasicMaterial( { color: 0xffffff } );
+    cursor = new THREE.Mesh( geometry, mat );
+
+    var subGeometry = new THREE.CircleGeometry( 30, 100 );
+    var subMat = new THREE.MeshBasicMaterial( { color: 0x000000 } );
+    cursor.add(new THREE.Mesh( subGeometry, subMat ));
+
+    cursor.translateZ(-4000);
+    scene.add(cursor);
+}
+
+function removeCursor() {
+    scene.remove(cursor);
 }
 
 function renderHome(tracks) {
+    toggleTrack = false;
 
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
 
     tracksGroup = new THREE.Object3D();
-    // tracksGroup.translateZ(-3000);
-    // tracksGroup.lookAt( camera.position );
-    scene.add( tracksGroup );
 
+    scene.add( tracksGroup );
+    
     var imageUrl = '';
     var geometry, mesh, material, texture;
 
@@ -44,10 +77,10 @@ function renderHome(tracks) {
     loader.crossOrigin = true; // otherwise image wont be usable and therefore visible
 
     var track;
-    // 5 Columns 
+    // 3 rows
     for(var y = 0; y < 3; y++) {
 
-        // 3 Rows
+        // 5 columns
         for(var x = 0; x < 5; x++) {
             track = tracks[x + y];
 
@@ -74,14 +107,18 @@ function renderHome(tracks) {
     }
 
     render();
+    window.addEventListener("mousemove", onMouseMove); 
 } 
 
 function renderTrack(track) {
+    toggleTrack = true;
 
     // Track scene rendering
     scene = new THREE.Scene();
+    removeCursor();
 
-    camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
+    if(!camera)
+        camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
 
     var imageUrl = '';
     var geometry, mesh, material, texture;
@@ -96,7 +133,7 @@ function renderTrack(track) {
 
     geometry = new THREE.PlaneGeometry( 500, 500 );
     mesh = new THREE.Mesh( geometry, material );
-            
+
     mesh.translateZ( -3000 );
 
 
@@ -124,8 +161,25 @@ function renderTrack(track) {
             throw new Error();
         });
     }
+    
     request.send();
     
+}
+
+function pickOnMove() {
+    raycaster.setFromCamera( new THREE.Vector2(0, 0), camera );
+    var intersects = raycaster.intersectObject( tracksGroup, true ); // true makes it recursive
+    console.log(intersects)
+    if(intersects.length > 0) {
+
+        var mesh = intersects[0].object;
+        var track = mesh.track;
+
+        // renderTrack( track );
+        cursor.position.z = -2000;
+    } else {
+        cursor.position.z = -4000;
+    }
 }
 
 window.addEventListener( 'resize', windowResize);
@@ -136,10 +190,10 @@ function windowResize(){
     camera.updateProjectionMatrix();
     //set render size
     renderer.setSize( window.innerWidth, window.innerHeight );
+    effect.setSize( window.innerWidth, window.innerHeight );
 }
 
-window.addEventListener("mousemove", onMouseMove); 
-
+// Should only be called in home
 var mouseScreenRatioY = 0, mouseScreenRatioX = 0;
 function onMouseMove(event) {
 
@@ -155,35 +209,101 @@ function onMouseMove(event) {
         
         // Convert mouse Y position between -PI/2 and PI/2 for vertical rotation (90˚ FOV)
         // has been optimized/factorized from prevision, formula might seem odd
-        tracksGroup.rotation.x =  mouseScreenRatioX * (fovVer + 10) / 360 * PI;
+        tracksGroup.rotation.x =  mouseScreenRatioX * (2 * (fovVer - 20)) / 360 * PI;
 
     }
 
     // Update mouse coordinates
     mouse.x = mouseScreenRatioY;
     mouse.y = - mouseScreenRatioX;
+
+    if(toggleStereo && !toggleTrack)
+        pickOnMove();
+
 }
 
 window.addEventListener("click", function() {
-    console.log('CLICK');
-    
+
     raycaster.setFromCamera( mouse, camera );
     var intersects = raycaster.intersectObject( tracksGroup, true ); // true makes it recursive
 
-    var mesh = intersects[0].object;
-    var track = mesh.track;
+    if(intersects.length > 0) {
 
-    console.log( track );
-    renderTrack( track );
+        var mesh = intersects[0].object;
+        var track = mesh.track;
+
+        renderTrack( track );
+
+    }
+
 });
 
 document.getElementById('c-logo').addEventListener("click", function() {
+    console.log('make it stereo');
+    if(!toggleStereo) {
 
+        if(!effect)
+            effect = new THREE.StereoEffect( renderer );
+
+        effect.setSize( window.innerWidth, window.innerHeight );
+
+        //Hide mouse
+        document.getElementsByTagName('canvas')[0].style.cursor = 'none';
+        
+        if(!toggleTrack)
+            renderCursor();
+
+        requestFullscreen();
+
+        toggleStereo = true;
+
+        render();
+
+    } else {
+
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        
+        //Show mouse
+        document.getElementsByTagName('canvas')[0].style.cursor = 'auto';
+
+        removeCursor();
+
+        exitFullscreen();
+
+        toggleStereo = false;
+
+        render();
+    }
 });
 
+function requestFullscreen() {
+    if (container.requestFullscreen) {
+        container.requestFullscreen();
+    } else if (container.msRequestFullscreen) {
+        container.msRequestFullscreen();
+    } else if (container.mozRequestFullScreen) {
+        container.mozRequestFullScreen();
+    } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+    }
+}
+
+function exitFullscreen() {
+    if (document.cancelFullscreen) {
+        document.cancelFullscreen();
+    } else if (document.msCancelFullscreen) {
+        document.msCancelFullscreen();
+    } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+    } else if (document.webkitCancelFullScreen) {
+        document.webkitCancelFullScreen();
+    }
+}
+
+// Will call every setup funcitno
 document.addEventListener("DOMContentLoaded", function() {
 
-    // Initialise Soundcloud API
+    // Initialize Soundcloud API
     SC.initialize({
         client_id: 'c1da0911d3af90cfd3153d5c6d030137'
     });
