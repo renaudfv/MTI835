@@ -187,3 +187,4 @@ THREE.DeviceOrientationControls = function(object) {
 
 })();
 
+module.exports = THREE.DeviceOrientationControls;
