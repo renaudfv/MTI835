@@ -55,7 +55,7 @@ if(window.chrome) {
 // Renders and update with browser refresh rate
 function render() {
     requestAnimationFrame( render );
-    console.log(toggleStereo)
+
     if(!toggleStereo)
         renderer.render( scene, camera );
     else 
@@ -88,8 +88,6 @@ function renderHome(tracks) {
 
     camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
 
-    console.log(scene)
-    
     var imageUrl = '';
     var geometry, mesh, material, texture;
 
@@ -393,7 +391,7 @@ window.addEventListener("click", function() {
 function toggleStereoF() {
     console.log('make it stereo');
     if(!toggleStereo) {
-        
+
         toggleStereo = true;
 
         if(!effect)
@@ -451,36 +449,56 @@ function exitFullscreen() {
     }
 }
 
-function handleOrientation(event) {
-    var absolute = THREE.Math.degToRad(event.absolute);
+function getOrientation() {
+    switch (window.screen.orientation || window.screen.mozOrientation) {
+      case 'landscape-primary':
+      return 90;
+      case 'landscape-secondary':
+      return -90;
+      case 'portrait-secondary':
+      return 180;
+      case 'portrait-primary':
+      return 0;
+  }
+    // this returns 90 if width is greater then height
+    // and window orientation is undefined OR 0
+    // if (!window.orientation && window.innerWidth > window.innerHeight)
+    //   return 90;
+    return window.orientation || 0;
+}
+
+/**
+* Shiting and rotation are made accordingly to device orientation
+* Rotation direction inverted and Z rot as gamma passes from 0 to PI on horizon
+*/
+function setGroupOrientation(event, group) {
     var alpha    = THREE.Math.degToRad(event.alpha); // Z
-    var beta     = THREE.Math.degToRad(event.beta); // X
-    var gamma    = THREE.Math.degToRad(event.gamma-90); // Y
+    var gamma    = THREE.Math.degToRad(event.gamma - 90); // Y, shift to center
 
-    if(!!trackPlayGroup && toggleTrack) 
-        trackPlayGroup.rotation = new THREE.Vector3(beta, gamma, alpha);
-    if(!!tracksGroup && ! toggleTrack)   {
-        tracksGroup.rotation.x  = -gamma;
-        tracksGroup.rotation.y = -alpha;
-        // tracksGroup.rotation.z = alpha;
+    if(-gamma < PI/2) {
+        group.rotation.z = 0;
+        group.rotation.x  = -gamma;
+        group.rotation.y = -alpha;
+    } else {
+        group.rotation.z = PI;
+        group.rotation.x  = -gamma;
+        group.rotation.y = alpha;
+    }
+}
+
+//Called on change
+function handleOrientation(event) {
+
+    if(!!trackPlayGroup && toggleTrack && mobilecheck()) {
+        setGroupOrientation(trackPlayGroup);
+    }
+    if(!!tracksGroup && !toggleTrack && mobilecheck())   {
+        setGroupOrientation(tracksGroup);
     } 
-
 
 }
 
-// function setOrientationControls(e) {
-//     if (!e.alpha) {
-//       return;
-//   }
-
-//   controls = new THREE.DeviceOrientationControls(camera, true);
-//   controls.connect();
-//   controls.update();
-
-//   window.removeEventListener('deviceorientation', setOrientationControls, true);
-// }
-
-
+// Displays home with SC results
 function querySoundcloud(query) {
     //Ask for more tracks just in cas SC sends less
     SC.get('/tracks', {
@@ -502,10 +520,12 @@ window.mobilecheck = function() {
   return check;
 }
 
+
 document.body.addEventListener("click", function() {
     console.log('body click', mobilecheck())
     if(mobilecheck()) {
         console.log('shouldbe mobile')
+        screen.orientation.lock('landscape-primary');
         toggleStereoF();
     }
 
