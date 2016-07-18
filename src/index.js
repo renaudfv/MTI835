@@ -444,6 +444,22 @@ function exitFullscreen() {
         document.webkitCancelFullScreen();
     }
 }
+
+function handleOrientation(event) {
+    var absolute = event.absolute;
+    var alpha    = event.alpha; // Z
+    var beta     = event.beta; // X
+    var gamma    = event.gamma; // Y
+
+    if(toggleTrack) 
+        trackPlayGroup.rotation = new THREE.Vector3(beta, gamma, alpha);
+    else    
+        tracksGroup.rotation = new THREE.Vector3(beta, gamma, alpha);
+
+}
+
+window.addEventListener('deviceorientation', handleOrientation);
+
 function querySoundcloud(query) {
     //Ask for more tracks just in cas SC sends less
     SC.get('/tracks', {
