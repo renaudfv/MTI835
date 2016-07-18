@@ -1,0 +1,7 @@
+{
+  "short_name": "MTI835",
+  "name": "MTI835 - Projet",
+  "start_url": "/index.html",
+  "display": "fullscreen",
+  "orientation": "landscape"
+}
