@@ -55,7 +55,7 @@ if(window.chrome) {
 // Renders and update with browser refresh rate
 function render() {
     requestAnimationFrame( render );
-
+    console.log(toggleStereo)
     if(!toggleStereo)
         renderer.render( scene, camera );
     else 
@@ -393,6 +393,8 @@ window.addEventListener("click", function() {
 function toggleStereoF() {
     console.log('make it stereo');
     if(!toggleStereo) {
+        
+        toggleStereo = true;
 
         if(!effect)
             effect = new THREE.StereoEffect( renderer );
@@ -404,14 +406,12 @@ function toggleStereoF() {
         
         renderCursor();
 
+        render();
         requestFullscreen();
 
-        toggleStereo = true;
-
-        render();
-
     } else {
-
+        toggleStereo = false;
+        
         renderer.setSize( window.innerWidth, window.innerHeight );
         
         //Show mouse
@@ -420,8 +420,6 @@ function toggleStereoF() {
         removeCursor();
 
         exitFullscreen();
-
-        toggleStereo = false;
 
         render();
     }
@@ -505,11 +503,12 @@ window.mobilecheck = function() {
 }
 
 document.body.addEventListener("click", function() {
-
-    if(mobilecheck) {
+    console.log('body click', mobilecheck())
+    if(mobilecheck()) {
+        console.log('shouldbe mobile')
         toggleStereoF();
     }
-    
+
 });
 
 // Will call every setup funcitno
