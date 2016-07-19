@@ -3,13 +3,12 @@ var _ = require('underscore');
 var SC = require('soundcloud');
 // from http://vr.chromeexperiments.com/
 var StereoEffect = require('../libs/threejs-vr/StereoEffect.js');
-var DeviceOrientationControls = require('../libs/threejs-vr/DeviceOrientationControls.js');
 THREE.StereoEffect = StereoEffect;
-THREE.DeviceOrientationControls = DeviceOrientationControls;
 
 var PI = Math.PI;
 
-var scene, camera, tracksGroup, trackPlayGroup, effect, cursor, source, controls;
+var scene, camera, effect, cursor;
+var tracksGroup, trackPlayGroup, curvesGroup;
 
 //WebGL rendering engine
 var renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -32,7 +31,12 @@ var toggleStereo = false;
 var toggleTrack = false;
 
 // Web audio context
+var source;
 var context = new ( window.AudioContext || window.webkitAudioContext );
+var analyser = context.createAnalyser();
+analyser.fftSize = 1024;
+var bufferLength = analyser.frequencyBinCount;
+var dataArray = new Float32Array(bufferLength);
 
 if(window.chrome) {
     var recognition = new webkitSpeechRecognition();
@@ -189,15 +193,21 @@ function renderTrack(track) {
     search.isSearch = true; // to handle actions
 
     back.rotateY(25 / 360 * PI);
-    back.rotateX(-75 / 360 * PI);
+    back.rotateX(75 / 360 * PI);
     back.translateZ(-3000);
 
     search.rotateY(-25 / 360 * PI);
-    search.rotateX(-75 / 360 * PI);
+    search.rotateX(75 / 360 * PI);
     search.translateZ(-3000);
 
+    curvesGroup = new THREE.Object3D();
+    curvesGroup.translateY(2500);
+    curvesGroup.translateZ(-5000);
+
     trackPlayGroup = new THREE.Object3D();
-    trackPlayGroup.add(back);
+
+    trackPlayGroup.add( back );
+    trackPlayGroup.add( curvesGroup );
 
     if(!!window.chrome)
         trackPlayGroup.add(search);
@@ -219,11 +229,13 @@ function renderTrack(track) {
             console.log(buffer);
             source = context.createBufferSource();
             source.buffer = buffer;
-
-            source.connect( context.destination );
+            source.connect( analyser );
+            analyser.connect( context.destination );
             source.start();
 
             render();
+            drawFrequencyCurve();
+
         }, function() {
             throw new Error();
         });
@@ -235,6 +247,39 @@ function renderTrack(track) {
     window.addEventListener('deviceorientation', handleOrientation);
     
 }
+
+var splineObject, points;
+var curveIndex = 0;
+function drawFrequencyCurve() {
+    requestAnimationFrame( drawFrequencyCurve );
+
+    // if(!!splineObject)
+    //     trackPlayGroup.remove(splineObject);
+
+    analyser.getFloatFrequencyData(dataArray);
+    points = [bufferLength];
+
+    for(var i = 0; i < bufferLength; i++) {
+        points[i] = new THREE.Vector3(i * 20, 3000 * dataArray[i] / (analyser.maxDecibels - analyser.minDecibels), -5000 - 80 * curveIndex);
+    }
+
+    var curve = new THREE.SplineCurve3(points);
+
+    geometry = new THREE.Geometry();
+    geometry.vertices = curve.getPoints( bufferLength);
+
+    var material = new THREE.LineBasicMaterial( { color : (0xf0f0f0 - curveIndex - Math.random()) } );
+
+    //Create the final Object3d to add to the scene
+    splineObject = new THREE.Line( geometry, material );
+
+    splineObject.translateX(-20 * bufferLength / 3);
+    curvesGroup.add(splineObject);
+    curvesGroup.translateZ(80);
+
+    curveIndex++;
+}
+
 
 var cursorAnimationInterval;
 var animationIndex = 1;
@@ -507,6 +552,7 @@ function querySoundcloud(query) {
     }).then(function(tracks){
 
         renderHome(tracks);
+        // renderTrack(tracks[0])
         if(!!source) source.stop();
         if(toggleStereo) renderCursor();
 
@@ -522,7 +568,7 @@ window.mobilecheck = function() {
 
 
 document.body.addEventListener("click", function() {
-    console.log('body click', mobilecheck())
+
     if(mobilecheck()) {
         console.log('shouldbe mobile')
         screen.orientation.lock('landscape-primary');

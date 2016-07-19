@@ -1,196 +1,4 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-/* globals THREE */
-/**
- * DeviceOrientationControls - applies device orientation on object rotation
- *
- * @param {Object} object - instance of THREE.Object3D
- * @constructor
- *
- * @author richt / http://richt.me
- * @author WestLangley / http://github.com/WestLangley
- * @author jonobr1 / http://jonobr1.com
- * @author arodic / http://aleksandarrodic.com
- * @author doug / http://github.com/doug
- *
- * W3C Device Orientation control
- * (http://w3c.github.io/deviceorientation/spec-source-orientation.html)
- */
-
-(function() {
-
-  var deviceOrientation = {};
-  var screenOrientation = window.orientation || 0;
-
-  function onDeviceOrientationChangeEvent(evt) {
-    deviceOrientation = evt;
-  }
-  window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent, false);
-
-  function getOrientation() {
-    switch (window.screen.orientation || window.screen.mozOrientation) {
-      case 'landscape-primary':
-        return 90;
-      case 'landscape-secondary':
-        return -90;
-      case 'portrait-secondary':
-        return 180;
-      case 'portrait-primary':
-        return 0;
-    }
-    // this returns 90 if width is greater then height
-    // and window orientation is undefined OR 0
-    // if (!window.orientation && window.innerWidth > window.innerHeight)
-    //   return 90;
-    return window.orientation || 0;
-  }
-
-  function onScreenOrientationChangeEvent() {
-    screenOrientation = getOrientation();
-  }
-  window.addEventListener('orientationchange', onScreenOrientationChangeEvent, false);
-
-
-THREE.DeviceOrientationControls = function(object) {
-
-  this.object = object;
-
-  this.object.rotation.reorder('YXZ');
-
-  this.freeze = true;
-
-  this.movementSpeed = 1.0;
-  this.rollSpeed = 0.005;
-  this.autoAlign = true;
-  this.autoForward = false;
-
-  this.alpha = 0;
-  this.beta = 0;
-  this.gamma = 0;
-  this.orient = 0;
-
-  this.alignQuaternion = new THREE.Quaternion();
-  this.orientationQuaternion = new THREE.Quaternion();
-
-  var quaternion = new THREE.Quaternion();
-  var quaternionLerp = new THREE.Quaternion();
-
-  var tempVector3 = new THREE.Vector3();
-  var tempMatrix4 = new THREE.Matrix4();
-  var tempEuler = new THREE.Euler(0, 0, 0, 'YXZ');
-  var tempQuaternion = new THREE.Quaternion();
-
-  var zee = new THREE.Vector3(0, 0, 1);
-  var up = new THREE.Vector3(0, 1, 0);
-  var v0 = new THREE.Vector3(0, 0, 0);
-  var euler = new THREE.Euler();
-  var q0 = new THREE.Quaternion(); // - PI/2 around the x-axis
-  var q1 = new THREE.Quaternion(- Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-
-
-  this.update = (function(delta) {
-
-    return function(delta) {
-
-      if (this.freeze) return;
-
-      // should not need this
-      //var orientation = getOrientation();
-      //if (orientation !== this.screenOrientation) {
-        //this.screenOrientation = orientation;
-        //this.autoAlign = true;
-      //}
-
-      this.alpha = deviceOrientation.gamma ?
-        THREE.Math.degToRad(deviceOrientation.alpha) : 0; // Z
-      this.beta = deviceOrientation.beta ?
-        THREE.Math.degToRad(deviceOrientation.beta) : 0; // X'
-      this.gamma = deviceOrientation.gamma ?
-        THREE.Math.degToRad(deviceOrientation.gamma) : 0; // Y''
-      this.orient = screenOrientation ?
-        THREE.Math.degToRad(screenOrientation) : 0; // O
-
-      // The angles alpha, beta and gamma
-      // form a set of intrinsic Tait-Bryan angles of type Z-X'-Y''
-
-      // 'ZXY' for the device, but 'YXZ' for us
-      euler.set(this.beta, this.alpha, - this.gamma, 'YXZ');
-
-      quaternion.setFromEuler(euler);
-      quaternionLerp.slerp(quaternion, 0.5); // interpolate
-
-      // orient the device
-      if (this.autoAlign) this.orientationQuaternion.copy(quaternion); // interpolation breaks the auto alignment
-      else this.orientationQuaternion.copy(quaternionLerp);
-
-      // camera looks out the back of the device, not the top
-      this.orientationQuaternion.multiply(q1);
-
-      // adjust for screen orientation
-      this.orientationQuaternion.multiply(q0.setFromAxisAngle(zee, - this.orient));
-
-      this.object.quaternion.copy(this.alignQuaternion);
-      this.object.quaternion.multiply(this.orientationQuaternion);
-
-      if (this.autoForward) {
-
-        tempVector3
-          .set(0, 0, -1)
-          .applyQuaternion(this.object.quaternion, 'ZXY')
-          .setLength(this.movementSpeed / 50); // TODO: why 50 :S
-
-        this.object.position.add(tempVector3);
-
-      }
-
-      if (this.autoAlign && this.alpha !== 0) {
-
-        this.autoAlign = false;
-
-        this.align();
-
-      }
-
-    };
-
-  })();
-
-  // //debug
-  // window.addEventListener('click', (function(){
-  //   this.align();
-  // }).bind(this));
-
-  this.align = function() {
-
-    tempVector3
-      .set(0, 0, -1)
-      .applyQuaternion( tempQuaternion.copy(this.orientationQuaternion).inverse(), 'ZXY' );
-
-    tempEuler.setFromQuaternion(
-      tempQuaternion.setFromRotationMatrix(
-        tempMatrix4.lookAt(tempVector3, v0, up)
-     )
-   );
-
-    tempEuler.set(0, tempEuler.y, 0);
-    this.alignQuaternion.setFromEuler(tempEuler);
-
-  };
-
-  this.connect = function() {
-    this.freeze = false;
-  };
-
-  this.disconnect = function() {
-    this.freze = true;
-  };
-
-};
-
-})();
-
-module.exports = THREE.DeviceOrientationControls;
-
-},{}],2:[function(require,module,exports){
 /**
  * @author alteredq / http://alteredqualia.com/
  * @authod mrdoob / http://mrdoob.com/
@@ -312,7 +120,7 @@ THREE.StereoEffect = function ( renderer ) {
 
 module.exports = THREE.StereoEffect;
 
-},{}],3:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
 !function(t,e){if("object"==typeof exports&&"object"==typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define([],e);else{var n=e();for(var i in n)("object"==typeof exports?exports:t)[i]=n[i]}}(this,function(){return function(t){function e(i){if(n[i])return n[i].exports;var r=n[i]={exports:{},id:i,loaded:!1};return t[i].call(r.exports,r,r.exports,e),r.loaded=!0,r.exports}var n={};return e.m=t,e.c=n,e.p="",e(0)}([function(t,e,n){(function(e){"use strict";var i=n(4),r=n(8),o=n(2),s=n(9),a=n(1).Promise,u=n(15),h=n(16);t.exports=e.SC={initialize:function(){var t=arguments.length<=0||void 0===arguments[0]?{}:arguments[0];o.set("oauth_token",t.oauth_token),o.set("client_id",t.client_id),o.set("redirect_uri",t.redirect_uri),o.set("baseURL",t.baseURL),o.set("connectURL",t.connectURL)},get:function(t,e){return i.request("GET",t,e)},post:function(t,e){return i.request("POST",t,e)},put:function(t,e){return i.request("PUT",t,e)},"delete":function(t){return i.request("DELETE",t)},upload:function(t){return i.upload(t)},connect:function(t){return s(t)},isConnected:function(){return void 0!==o.get("oauth_token")},oEmbed:function(t,e){return i.oEmbed(t,e)},resolve:function(t){return i.resolve(t)},Recorder:u,Promise:a,stream:function(t,e){return h(t,e)},connectCallback:function(){r.notifyDialog(this.location)}}}).call(e,function(){return this}())},function(t,e,n){var i;(function(t,r,o,s){/*!
 	 * @overview es6-promise - a tiny implementation of Promises/A+.
 	 * @copyright Copyright (c) 2014 Yehuda Katz, Tom Dale, Stefan Penner and contributors (Conversion to ES6 API by Jake Archibald)
@@ -341,7 +149,7 @@ this[this.isPaused()?"play":"pause"]()},play:function(t){var e;if(t&&null!=t.see
 		*/
 var i=t.exports=n(4),r=Array.prototype.slice;i.extend({Deferred:function(t){var e=[["resolve","done",i.Callbacks("once memory"),"resolved"],["reject","fail",i.Callbacks("once memory"),"rejected"],["notify","progress",i.Callbacks("memory")]],n="pending",r={state:function(){return n},always:function(){return o.done(arguments).fail(arguments),this},then:function(){var t=arguments;return i.Deferred(function(n){i.each(e,function(e,r){var s=r[0],a=t[e];o[r[1]](i.isFunction(a)?function(){var t=a.apply(this,arguments);t&&i.isFunction(t.promise)?t.promise().done(n.resolve).fail(n.reject).progress(n.notify):n[s+"With"](this===o?n:this,[t])}:n[s])}),t=null}).promise()},promise:function(t){return null!=t?i.extend(t,r):r}},o={};return r.pipe=r.then,i.each(e,function(t,i){var s=i[2],a=i[3];r[i[1]]=s.add,a&&s.add(function(){n=a},e[1^t][2].disable,e[2][2].lock),o[i[0]]=s.fire,o[i[0]+"With"]=s.fireWith}),r.promise(o),t&&t.call(o,o),o},when:function(t){var e,n,o,s=0,a=r.call(arguments),u=a.length,h=1!==u||t&&i.isFunction(t.promise)?u:0,c=1===h?t:i.Deferred(),l=function(t,n,i){return function(o){n[t]=this,i[t]=arguments.length>1?r.call(arguments):o,i===e?c.notifyWith(n,i):--h||c.resolveWith(n,i)}};if(u>1)for(e=new Array(u),n=new Array(u),o=new Array(u);u>s;s++)a[s]&&i.isFunction(a[s].promise)?a[s].promise().done(l(s,o,a)).fail(c.reject).progress(l(s,n,e)):--h;return h||c.resolveWith(o,a),c.promise()}})},function(t,e,n){function i(t){var e=s[t]={};return r.each(t.split(o),function(t,n){e[n]=!0}),e}var r=t.exports=n(5),o=/\s+/,s={};r.Callbacks=function(t){t="string"==typeof t?s[t]||i(t):r.extend({},t);var e,n,o,a,u,h,c=[],l=!t.once&&[],f=function(i){for(e=t.memory&&i,n=!0,h=a||0,a=0,u=c.length,o=!0;c&&u>h;h++)if(c[h].apply(i[0],i[1])===!1&&t.stopOnFalse){e=!1;break}o=!1,c&&(l?l.length&&f(l.shift()):e?c=[]:d.disable())},d={add:function(){if(c){var n=c.length;!function i(e){r.each(e,function(e,n){var o=r.type(n);"function"===o?t.unique&&d.has(n)||c.push(n):n&&n.length&&"string"!==o&&i(n)})}(arguments),o?u=c.length:e&&(a=n,f(e))}return this},remove:function(){return c&&r.each(arguments,function(t,e){for(var n;(n=r.inArray(e,c,n))>-1;)c.splice(n,1),o&&(u>=n&&u--,h>=n&&h--)}),this},has:function(t){return r.inArray(t,c)>-1},empty:function(){return c=[],this},disable:function(){return c=l=e=void 0,this},disabled:function(){return!c},lock:function(){return l=void 0,e||d.disable(),this},locked:function(){return!l},fireWith:function(t,e){return e=e||[],e=[t,e.slice?e.slice():e],!c||n&&!l||(o?l.push(e):f(e)),this},fire:function(){return d.fireWith(this,arguments),this},fired:function(){return!!n}};return d}},function(t,e){function n(t){return null==t?String(t):c[h.call(t)]||"object"}function i(t){return"function"===u.type(t)}function r(t){return"array"===u.type(t)}function o(t,e,n){var r,o=0,s=t.length,a=void 0===s||i(t);if(n)if(a){for(r in t)if(e.apply(t[r],n)===!1)break}else for(;s>o&&e.apply(t[o++],n)!==!1;);else if(a){for(r in t)if(e.call(t[r],r,t[r])===!1)break}else for(;s>o&&e.call(t[o],o,t[o++])!==!1;);return t}function s(t){return!(!t||"object"!==u.type(t))}function a(){var t,e,n,i,r,o,s=arguments[0]||{},a=1,h=arguments.length,c=!1;for("boolean"==typeof s&&(c=s,s=arguments[1]||{},a=2),"object"==typeof s||u.isFunction(s)||(s={}),h===a&&(s=this,--a);h>a;a++)if(null!=(t=arguments[a]))for(e in t)n=s[e],i=t[e],s!==i&&(c&&i&&(u.isPlainObject(i)||(r=u.isArray(i)))?(r?(r=!1,o=n&&u.isArray(n)?n:[]):o=n&&u.isPlainObject(n)?n:{},s[e]=u.extend(c,o,i)):void 0!==i&&(s[e]=i));return s}var u=t.exports={type:n,isArray:r,isFunction:i,isPlainObject:s,each:o,extend:a,noop:function(){}},h=Object.prototype.toString,c={};"Boolean Number String Function Array Date RegExp Object".split(" ").forEach(function(t){c["[object "+t+"]"]=t.toLowerCase()})},function(t,e,n){function i(t){this.listenTime+=t.from-this.currentTime,this.currentTime=t.to}function r(t){this.listenTime+=t.position-this.currentTime,this.currentTime=t.position}function o(t){this.currentTime=t.position}var s,a=n(7);s=t.exports=function(t){this.scAudio=t,this.listenTime=0,this.currentTime=0,this.scAudio.on(a.SEEK,i,this).on(a.PLAY_START,o,this).on(a.PAUSE,r,this)},s.prototype={constructor:s,getListenTime:function(){return this.listenTime+this.scAudio.currentTime()-this.currentTime}}},function(t,e){var n={CREATED:"created",STATE_CHANGE:"state-change",DESTROYED:"destroyed",PLAY:"play",PLAY_START:"play-start",PLAY_RESUME:"play-resume",METADATA:"metadata",PAUSE:"pause",FINISH:"finish",RESET:"reset",SEEK:"seek",SEEKED:"seeked",GEO_BLOCKED:"geo_blocked",BUFFERRING_START:"buffering_start",BUFFERRING_END:"buffering_end",FLASH_NOT_LOADED:"flash_not_loaded",FLASH_BLOCK:"flash_blocked",FLASH_UNBLOCK:"flash_unblocked",AUDIO_ERROR:"audio_error",TIME:"time",NO_STREAMS:"no_streams",STREAMS:"streams",NO_PROTOCOL:"no_protocol",NO_CONNECTION:"no_connection",REGISTERED:"registered",ONLINE:"online",OFFLINE:"offline"};t.exports=n},function(t,e,n){function i(){return this.scAudio.controller?this.controller?void m.warn("(%s) Setup was called while it was already initialized (returned with a no-op)",this.scAudio.getId()):(m("(%s) Initialized",this.scAudio.getId()),this.controller=this.scAudio.controller,this.protocol=this.scAudio.streamInfo.protocol,void(this.host=S.getUrlHost(this.scAudio.streamInfo.url))):void m.warn("Can´t initialize when controller is null")}function r(){this.controller&&(m("(%s) Reset",this.scAudio.getId()),this.controller=this.protocol=this.host=null,this.timeToPlayMeasured=!1)}function o(t){var e=this.scAudio.getAudioManagerStates();t===e.LOADING?this.timeToPlayMeasured&&f.call(this):A.isNull(this.bufferingStartTime)||d.call(this)}function s(){this.metadataLoadStartTime=Date.now()}function a(){return A.isNull(this.metadataLoadStartTime)?void m.warn("(%s) onMetadataEnd was called without onMetadataStart being called before.",this.scAudio.getId()):(this.log({type:"metadata",latency:Date.now()-this.metadataLoadStartTime}),void(this.metadataLoadStartTime=null))}function u(){this.playClickTime=Date.now()}function h(){if(!this.timeToPlayMeasured){if(A.isNull(this.playClickTime))return void m.warn("(%s) onPlayResume was called without onPlayStart being called before.",this.scAudio.getId());this.log({type:"play",latency:Date.now()-this.playClickTime}),this.playClickTime=null,this.timeToPlayMeasured=!0}}function c(){this.scAudio.isPaused()||(this.seekStartTime=Date.now())}function l(){if(!this.scAudio.isPaused()){if(A.isNull(this.seekStartTime))return void m.warn("(%s) onSeekEnd was called without onSeekStart being called before.",this.scAudio.getId());this.log({type:"seek",latency:Date.now()-this.seekStartTime}),this.seekStartTime=null}}function f(){this.bufferingStartTime||(this.bufferingStartTime=Date.now())}function d(){return A.isNull(this.bufferingStartTime)?void m.warn("(%s) onBufferingEnd was called without onBufferingStart being called before.",this.scAudio.getId()):(p.call(this),void(this.bufferingStartTime=null))}function p(){A.isNull(this.bufferingStartTime)||(A.isNull(this.bufferingTimeAccumulated)&&(this.bufferingTimeAccumulated=0),this.bufferingTimeAccumulated+=Date.now()-this.bufferingStartTime)}function g(){p.call(this),A.isNull(this.bufferingTimeAccumulated)||(this.log({type:"buffer",latency:this.bufferingTimeAccumulated}),this.bufferingStartTime=this.bufferingTimeAccumulated=null)}var _,m,y=n(9),v=n(7),E=n(10),S=n(12),A=n(13);_=t.exports=function(t,e){this.scAudio=t,this.logFn=e,this.controller=null,this.reset(),m=m||y(t.options.debug,"audioperf"),t.on(v.CREATED,i,this).on(v.RESET,r,this).on(v.DESTROYED,r,this).on(v.SEEK,c,this).on(v.SEEKED,l,this).on(v.PLAY,u,this).on(v.PLAY_START,s,this).on(v.PLAY_RESUME,h,this).on(v.PAUSE,g,this).on(v.FINISH,g,this).on(v.STATE_CHANGE,o,this).on(v.METADATA,a,this)},A.extend(_.prototype,E,{constructor:_,log:function(t){return this.controller?(A.extend(t,{protocol:this.protocol,host:this.host,playertype:this.controller.getType()}),m("(%s) %s latency: %d protocol: %s host: %s playertype: %s",this.scAudio.getId(),t.type,t.latency,t.protocol,t.host,t.playertype),void this.logFn(t)):void m.warn("(%s) Monitor log was called while controller is null (returned with a no-op)",this.scAudio.getId())},reset:function(){this.bufferingStartTime=this.bufferingTimeAccumulated=this.playClickTime=this.seekStartTime=this.metadataLoadStartTime=null,this.timeToPlayMeasured=!1}})},function(t,e){function n(){function t(t,n){for(var i,r=arguments.length,o=Array(r>2?r-2:0),s=2;r>s;s++)o[s-2]=arguments[s];"string"==typeof n?n=" "+n:(o.unshift(n),n=""),(i=window.console)[t].apply(i,[e()+" |"+c+"%c"+n].concat(l,o))}function e(){var t=new Date,e=null===h?0:t-h;return h=+t,"%c"+r(t.getHours())+":"+r(t.getMinutes())+":"+r(t.getSeconds())+"."+i(t.getMilliseconds(),"0",3)+"%c (%c"+i("+"+e+"ms"," ",8)+"%c)"}var n=arguments.length<=0||void 0===arguments[0]?!0:arguments[0],o=arguments.length<=1||void 0===arguments[1]?"":arguments[1];if(!n)return s;var h=null,c=a(o),l=["color: green","color: grey","color: blue","color: grey",u(o),""],f=t.bind(null,"log");return f.log=f,["info","warn","error"].forEach(function(e){f[e]=t.bind(null,e)}),f}function i(t,e,n){return o(e,n-(""+t).length)+t}function r(t){return i(t,"0",2)}function o(t,e){return e>0?new Array(e+1).join(t):""}function s(){}function a(t){return t?"%c"+t:"%c"}t.exports=n,s.log=s.info=s.warn=s.error=s;var u=function(){var t=["#51613C","#447848","#486E5F","#787444","#6E664E"],e=0;return function(n){return n?"background-color:"+t[e++%t.length]+";color:#fff;border-radius:3px;padding:2px 4px;font-family:sans-serif;text-transform:uppercase;font-size:9px;margin:0 4px":""}}()},function(t,e,n){t.exports=n(11)},function(t,e,n){!function(){function n(){return{keys:Object.keys||function(t){if("object"!=typeof t&&"function"!=typeof t||null===t)throw new TypeError("keys() called on a non-object");var e,n=[];for(e in t)t.hasOwnProperty(e)&&(n[n.length]=e);return n},uniqueId:function(t){var e=++a+"";return t?t+e:e},has:function(t,e){return o.call(t,e)},each:function(t,e,n){if(null!=t)if(r&&t.forEach===r)t.forEach(e,n);else if(t.length===+t.length)for(var i=0,o=t.length;o>i;i++)e.call(n,t[i],i,t);else for(var s in t)this.has(t,s)&&e.call(n,t[s],s,t)},once:function(t){var e,n=!1;return function(){return n?e:(n=!0,e=t.apply(this,arguments),t=null,e)}}}}var i,r=Array.prototype.forEach,o=Object.prototype.hasOwnProperty,s=Array.prototype.slice,a=0,u=n();i={on:function(t,e,n){if(!c(this,"on",t,[e,n])||!e)return this;this._events||(this._events={});var i=this._events[t]||(this._events[t]=[]);return i.push({callback:e,context:n,ctx:n||this}),this},once:function(t,e,n){if(!c(this,"once",t,[e,n])||!e)return this;var i=this,r=u.once(function(){i.off(t,r),e.apply(this,arguments)});return r._callback=e,this.on(t,r,n)},off:function(t,e,n){var i,r,o,s,a,h,l,f;if(!this._events||!c(this,"off",t,[e,n]))return this;if(!t&&!e&&!n)return this._events={},this;for(s=t?[t]:u.keys(this._events),a=0,h=s.length;h>a;a++)if(t=s[a],o=this._events[t]){if(this._events[t]=i=[],e||n)for(l=0,f=o.length;f>l;l++)r=o[l],(e&&e!==r.callback&&e!==r.callback._callback||n&&n!==r.context)&&i.push(r);i.length||delete this._events[t]}return this},trigger:function(t){if(!this._events)return this;var e=s.call(arguments,1);if(!c(this,"trigger",t,e))return this;var n=this._events[t],i=this._events.all;return n&&l(n,e),i&&l(i,arguments),this},stopListening:function(t,e,n){var i=this._listeners;if(!i)return this;var r=!e&&!n;"object"==typeof e&&(n=this),t&&((i={})[t._listenerId]=t);for(var o in i)i[o].off(e,n,this),r&&delete this._listeners[o];return this}};var h=/\s+/,c=function(t,e,n,i){if(!n)return!0;if("object"==typeof n){for(var r in n)t[e].apply(t,[r,n[r]].concat(i));return!1}if(h.test(n)){for(var o=n.split(h),s=0,a=o.length;a>s;s++)t[e].apply(t,[o[s]].concat(i));return!1}return!0},l=function(t,e){var n,i=-1,r=t.length,o=e[0],s=e[1],a=e[2];switch(e.length){case 0:for(;++i<r;)(n=t[i]).callback.call(n.ctx);return;case 1:for(;++i<r;)(n=t[i]).callback.call(n.ctx,o);return;case 2:for(;++i<r;)(n=t[i]).callback.call(n.ctx,o,s);return;case 3:for(;++i<r;)(n=t[i]).callback.call(n.ctx,o,s,a);return;default:for(;++i<r;)(n=t[i]).callback.apply(n.ctx,e)}},f={listenTo:"on",listenToOnce:"once"};u.each(f,function(t,e){i[e]=function(e,n,i){var r=this._listeners||(this._listeners={}),o=e._listenerId||(e._listenerId=u.uniqueId("l"));return r[o]=e,"object"==typeof n&&(i=this),e[t](n,i,this),this}}),i.bind=i.on,i.unbind=i.off,i.mixin=function(t){var e=["on","once","off","trigger","stopListening","listenTo","listenToOnce","bind","unbind"];return u.each(e,function(e){t[e]=this[e]},this),t},"undefined"!=typeof t&&t.exports&&(e=t.exports=i),e.BackboneEvents=i}(this)},function(t,e){var n={getUrlParams:function(t){var e={},n=t.indexOf("?");return n>-1&&t.substr(n+1).split("&").forEach(function(t){var n=t.split("=");e[n[0]]=n[1]}),e},getUrlHost:function(t){var e,n=t.split("//");return e=n[0]===t?n[0].split("/")[0]:n[1]?n[1].split("/")[0]:""}};t.exports=n},function(t,e){var n={extend:function(t){var e=Array.prototype.slice.call(arguments,1);return e.forEach(function(e){if(e)for(var n in e)e.hasOwnProperty(n)&&(t[n]=e[n])}),t},each:function(t,e,n){Object.keys(t).forEach(function(i){e.call(n||null,t[i],i)})},without:function(t,e){var n=t.indexOf(e);n>-1&&t.splice(n,1)},result:function(t){var e=t;return n.isFunction(e)&&(e=t()),e},isFunction:function(t){return"function"==typeof t},after:function(t,e){return function(){return--t<1?e.apply(this,arguments):void 0}},isNull:function(t){return null===t},once:function(t){var e,n=!1;return function(){return n?e:(n=!0,void(e=t.apply(this,arguments)))}}};t.exports=n},function(t,e){var n={AAC:"aac",MP3:"mp3",OGG:"ogg",OPUS:"opus",WAV:"wav"};t.exports=n},function(t,e){var n={HTTP:"http",RTMP:"rtmp",HLS:"hls"};t.exports=n},function(t,e,n){function i(t){return h.supportsMediaSourceExtensions()&&t.mediaSourceEnabled&&(h.isChrome()&&h.getChromeVersion()>=35||h.isFirefox()&&t.mseFirefox||h.isSafari()&&t.mseSafari)}function r(t){return function(e){var n=!1;switch(e){case u.RTMP:n=h.supportsFlash();break;case u.HTTP:n=h.supportsHTML5Audio()||h.supportsFlash();break;case u.HLS:n=i(t)}return n}}function o(t){return h.isSafari()||h.isFirefox()?[u.HLS,u.HTTP,u.RTMP]:t}function s(t){t.protocols=o(t.protocols).filter(r(t))}var a,u=n(15),h=n(17);a={prioritizeAndFilter:s},t.exports=a},function(t,e){function n(t){return t.test(window.navigator.userAgent.toLowerCase())}function i(t,e){try{return window.navigator.userAgent.toLowerCase().match(t)[e]}catch(n){return null}}function r(){try{return parseInt(i(/chrom(e|ium)\/([0-9]+)\./,2),10)}catch(t){return NaN}}function o(){return!h()&&n(/safari/)}function s(){return o()&&n(/version\/7\.1/)}function a(){return o()&&n(/version\/8/)&&!n(/version\/80/)}function u(){return o()&&n(/version\/9\./)}function h(){return n(/chrom(e|ium)/)}function c(){return n(/firefox/)}function l(){return!!window.MediaSource&&(window.MediaSource.isTypeSupported("audio/mpeg")||window.MediaSource.isTypeSupported("audio/mp4"))}function f(){try{return window.hasOwnProperty("Audio")&&!!(new window.Audio).canPlayType("audio/mpeg")}catch(t){return!1}}function d(){try{var t=o()&&n(/version\/5\.0/),e=window.hasOwnProperty("Audio")&&(!!(new window.Audio).canPlayType('audio/x-mpegURL; codecs="mp3"')||!!(new window.Audio).canPlayType('vnd.apple.mpegURL; codecs="mp3"'));return!t&&e}catch(i){return!1}}function p(){return _(g())>=y}function g(){var t,e,n,i;if("undefined"!=typeof window.ActiveXObject)try{i=new window.ActiveXObject("ShockwaveFlash.ShockwaveFlash"),i&&(t=i.GetVariable("$version"))}catch(r){t=null}else window.navigator&&window.navigator.plugins&&window.navigator.plugins.length>0&&(n="application/x-shockwave-flash",e=window.navigator.mimeTypes,e&&e[n]&&e[n].enabledPlugin&&e[n].enabledPlugin.description&&(t=e[n].enabledPlugin.description));return t}function _(t){if(!t)return 0;var e=t.match(/\d\S+/)[0].replace(/,/g,".").split(".");return parseFloat([e[0],e[1]].join("."))||0}var m,y=9;m={flashPlugin:g,isSafari:o,isSafari71:s,isSafari8:a,isSafari9:u,isChrome:h,getChromeVersion:r,isFirefox:c,supportsNativeHLSAudio:d,supportsHTML5Audio:f,supportsFlash:p,supportsMediaSourceExtensions:l},t.exports=m},function(t,e,n){function i(t){var e=f.getUrlHost(t);return p.every(function(t){return 0!==e.indexOf(t)})}function r(t,e){return!(t===c.HLS&&!i(e))}function o(t,e){if(!t)return!1;var n=t.issuedAt+s(t.protocol,t.duration);return a(t.protocol)?Date.now()+t.duration-(e||0)<n:Date.now()<n}function s(t,e){var n=a(t);return g+(n?l.result(e):0)}function a(t){return t===c.HTTP||t===c.HLS}function u(t,e){function n(t){return-1*t}function i(t,e){return Math.abs(e-m)-Math.abs(t-m)}var o,s,a,u,h,c,f,d,p,g,_={},m=e.maxBitrate,y=e.protocols,v=e.extensions;for(l.each(t,function(t,e){var n=e.split("_"),i=n[0],r=n[1],o=n[2];_[i]=_[i]||{},_[i][r]=_[i][r]||{},_[i][r][o]=t}),h=0,c=y.length;c>h;++h)for(u=y[h],d=0,p=v.length;p>d;++d)if(f=v[d],_[u]&&_[u][f]){if(o=Object.keys(_[u][f]).map(Number).sort(n),s=m===1/0,a=m===-(1/0),m=s||a?o[s?"pop":"shift"]():o.sort(i).pop(),g=_[u][f][m],!r(u,g))continue;return{url:g,bitrate:m,protocol:u,extension:f,issuedAt:Date.now(),duration:l.result(e.duration)}}return null}var h,c=n(15),l=n(13),f=n(12),d=.9,p=[],g=Math.floor(12e4*d);h={choosePreferredStream:u,streamValidForPlayingFrom:o},t.exports=h},function(t,e,n){var i,r,o=n(7),s=n(13),a={Linear:0,EaseOut:1,EaseInOut:2},u=600,h=25;t.exports=i={},i.VolumeAutomator=r=function(t){this.scAudio=t,this.fadeOutAlgo=this.scAudio.options.fadeOutAlgo,this.fadeOutTimer=null,this.initialVolume=void 0,this.scAudio.options.fadeOutOnPause&&r.isSupported()&&(this.scAudio.on(o.PLAY,this.onPlay,this),this.scAudio.registerHook("pause",this.hookPause.bind(this)))},i.VolumeAutomator.isSupported=function(){var t=new window.Audio,e=t.volume,n=0===e?1:e/2;return t.volume=n,t.volume===n},i.VolumeAutomator.Algos=a,s.extend(r.prototype,{fadeOutAndPause:function(){var t=Date.now(),e=function(){var n,i=(Date.now()-t)/u,r=this.initialVolume;if(i>=1)this.scAudio.controller&&this.scAudio.controller.pause(),this.cancelFadeout();else{switch(this.fadeOutAlgo){case a.Linear:n=r*(1-i);break;case a.EaseOut:n=r*(1/(10*(i+.1))-.05);break;case a.EaseInOut:default:n=r*(Math.cos(i*Math.PI)/2+.5)}this.scAudio.setVolume(n),window.clearTimeout(this.fadeOutTimer),this.fadeOutTimer=window.setTimeout(e,h)}}.bind(this);this.initialVolume=this.scAudio.getVolume(),e()},cancelFadeout:function(){this.fadeOutTimer&&(window.clearTimeout(this.fadeOutTimer),this.fadeOutTimer=null,this.scAudio.setVolume(this.initialVolume),this.initialVolume=void 0)},hookPause:function(t){return this.fadeOutAndPause(),!1},onPlay:function(){this.cancelFadeout()}})}])},function(t,e){}])});
 
-},{}],4:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 // File:src/Three.js
 
 /**
@@ -42087,7 +41895,7 @@ THREE.MorphBlendMesh.prototype.update = function ( delta ) {
 };
 
 
-},{}],5:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 //     Underscore.js 1.8.3
 //     http://underscorejs.org
 //     (c) 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -43637,19 +43445,18 @@ THREE.MorphBlendMesh.prototype.update = function ( delta ) {
   }
 }.call(this));
 
-},{}],6:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 THREE = require('three');
 var _ = require('underscore');
 var SC = require('soundcloud');
 // from http://vr.chromeexperiments.com/
 var StereoEffect = require('../libs/threejs-vr/StereoEffect.js');
-var DeviceOrientationControls = require('../libs/threejs-vr/DeviceOrientationControls.js');
 THREE.StereoEffect = StereoEffect;
-THREE.DeviceOrientationControls = DeviceOrientationControls;
 
 var PI = Math.PI;
 
-var scene, camera, tracksGroup, trackPlayGroup, effect, cursor, source, controls;
+var scene, camera, effect, cursor;
+var tracksGroup, trackPlayGroup, curvesGroup;
 
 //WebGL rendering engine
 var renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -43672,7 +43479,12 @@ var toggleStereo = false;
 var toggleTrack = false;
 
 // Web audio context
+var source;
 var context = new ( window.AudioContext || window.webkitAudioContext );
+var analyser = context.createAnalyser();
+analyser.fftSize = 1024;
+var bufferLength = analyser.frequencyBinCount;
+var dataArray = new Float32Array(bufferLength);
 
 if(window.chrome) {
     var recognition = new webkitSpeechRecognition();
@@ -43829,15 +43641,21 @@ function renderTrack(track) {
     search.isSearch = true; // to handle actions
 
     back.rotateY(25 / 360 * PI);
-    back.rotateX(-75 / 360 * PI);
+    back.rotateX(75 / 360 * PI);
     back.translateZ(-3000);
 
     search.rotateY(-25 / 360 * PI);
-    search.rotateX(-75 / 360 * PI);
+    search.rotateX(75 / 360 * PI);
     search.translateZ(-3000);
 
+    curvesGroup = new THREE.Object3D();
+    curvesGroup.translateY(2500);
+    curvesGroup.translateZ(-5000);
+
     trackPlayGroup = new THREE.Object3D();
-    trackPlayGroup.add(back);
+
+    trackPlayGroup.add( back );
+    trackPlayGroup.add( curvesGroup );
 
     if(!!window.chrome)
         trackPlayGroup.add(search);
@@ -43859,11 +43677,13 @@ function renderTrack(track) {
             console.log(buffer);
             source = context.createBufferSource();
             source.buffer = buffer;
-
-            source.connect( context.destination );
+            source.connect( analyser );
+            analyser.connect( context.destination );
             source.start();
 
             render();
+            drawFrequencyCurve();
+
         }, function() {
             throw new Error();
         });
@@ -43875,6 +43695,39 @@ function renderTrack(track) {
     window.addEventListener('deviceorientation', handleOrientation);
     
 }
+
+var splineObject, points;
+var curveIndex = 0;
+function drawFrequencyCurve() {
+    requestAnimationFrame( drawFrequencyCurve );
+
+    // if(!!splineObject)
+    //     trackPlayGroup.remove(splineObject);
+
+    analyser.getFloatFrequencyData(dataArray);
+    points = [bufferLength];
+
+    for(var i = 0; i < bufferLength; i++) {
+        points[i] = new THREE.Vector3(i * 20, 3000 * dataArray[i] / (analyser.maxDecibels - analyser.minDecibels), -5000 - 80 * curveIndex);
+    }
+
+    var curve = new THREE.SplineCurve3(points);
+
+    geometry = new THREE.Geometry();
+    geometry.vertices = curve.getPoints( bufferLength);
+
+    var material = new THREE.LineBasicMaterial( { color : (0xf0f0f0 - curveIndex - Math.random()) } );
+
+    //Create the final Object3d to add to the scene
+    splineObject = new THREE.Line( geometry, material );
+
+    splineObject.translateX(-20 * bufferLength / 3);
+    curvesGroup.add(splineObject);
+    curvesGroup.translateZ(80);
+
+    curveIndex++;
+}
+
 
 var cursorAnimationInterval;
 var animationIndex = 1;
@@ -44147,6 +44000,7 @@ function querySoundcloud(query) {
     }).then(function(tracks){
 
         renderHome(tracks);
+        // renderTrack(tracks[0])
         if(!!source) source.stop();
         if(toggleStereo) renderCursor();
 
@@ -44162,7 +44016,7 @@ window.mobilecheck = function() {
 
 
 document.body.addEventListener("click", function() {
-    console.log('body click', mobilecheck())
+
     if(mobilecheck()) {
         console.log('shouldbe mobile')
         screen.orientation.lock('landscape-primary');
@@ -44186,4 +44040,4 @@ document.addEventListener("DOMContentLoaded", function() {
     querySoundcloud('erased tapes');
 
 });
-},{"../libs/threejs-vr/DeviceOrientationControls.js":1,"../libs/threejs-vr/StereoEffect.js":2,"soundcloud":3,"three":4,"underscore":5}]},{},[6]);
+},{"../libs/threejs-vr/StereoEffect.js":1,"soundcloud":2,"three":3,"underscore":4}]},{},[5]);
