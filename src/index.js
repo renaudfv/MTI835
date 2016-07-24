@@ -508,7 +508,7 @@ function toggleStereoF() {
 
         render();
         requestFullscreen();
-        screen.orientation.lock('landscape'); // needs to be fullscreen first
+        screen.orientation.lock('landscape-secondary'); // needs to be fullscreen first
 
     } else {
         toggleStereo = false;
@@ -575,19 +575,29 @@ function getOrientation() {
 * Rotation direction inverted and Z rot as gamma passes from 0 to PI on horizon
 */
 function setGroupOrientation(event, group) {
-    var alpha    = THREE.Math.degToRad(event.alpha); // Z
-    var gamma    = THREE.Math.degToRad(event.gamma - 90); // Y, shift to center
-    var beta = THREE.Math.degToRad(event.beta);
+    var alpha    = THREE.Math.degToRad(event.alpha); // y
+    var gamma    = THREE.Math.degToRad(event.gamma); // x
+    var beta = THREE.Math.degToRad(event.beta); // z
 
-    if(-gamma < PI/2) {
-        group.rotation.z = -beta;
-        group.rotation.x  = -gamma;
-        group.rotation.y = -alpha;
-    } else {
-        group.rotation.z = - PI - beta;
-        group.rotation.x  = -gamma;
-        group.rotation.y = alpha;
-    }
+    // must invert directions
+    // group.rotati  
+
+    group.rotation.z = (gamma < 0) ? beta + PI : -beta;
+    group.rotation.y = (gamma < 0) ? (-alpha-PI) : (-alpha);
+    group.rotation.x = (gamma < 0) ? -gamma-PI/2 : -gamma+PI/2;
+
+    // console.log(-gamma - PI);
+    // console.log('alpha: ' + event.alpha + ' beta: ' + event.beta + ' gamma: '+ event.gamma)
+    console.log('beta', beta);
+    // if(-gamma < PI/2) {
+    //     // group.rotation.z = -beta;
+    //     group.rotation.x  = -gamma;
+    //     group.rotation.y = -alpha;
+    // } else {
+    //     // group.rotation.z = PI + beta;
+    //     group.rotation.x  = -gamma + PI;
+    //     group.rotation.y = alpha;
+    // }
 }
 
 //Called on change
