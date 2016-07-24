@@ -5,6 +5,9 @@ var SC = require('soundcloud');
 var StereoEffect = require('../libs/threejs-vr/StereoEffect.js');
 THREE.StereoEffect = StereoEffect;
 
+var ColladaLoader = require('../libs/collada.js');
+THREE.ColladaLoader = ColladaLoader;
+
 var PI = Math.PI;
 
 var scene, camera, effect, cursor;
@@ -13,6 +16,7 @@ var tracksGroup, trackPlayGroup, curvesGroup;
 //WebGL rendering engine
 var renderer = new THREE.WebGLRenderer( { antialias: true } );
 renderer.setPixelRatio( window.devicePixelRatio );
+var maxAnisotropy = renderer.getMaxAnisotropy();
 
 //Used for fullscreen
 var container = document.body;
@@ -99,11 +103,18 @@ function renderHome(tracks) {
     loader.crossOrigin = true; // otherwise image wont be usable and therefore visible
 
     //Navigation icons
+    var backTexture = loader.load('files/back.png');
+    backTexture.minFilter = THREE.LinearFilter;
+    backTexture.magFilter = THREE.LinearMipMapLinearFilter;
     var back = new THREE.Mesh( new THREE.PlaneGeometry( 500, 500 ), 
-        new THREE.MeshBasicMaterial( { map: loader.load('back.png') } ));
+        new THREE.MeshBasicMaterial( { map: backTexture } ));
     back.isBack = true; // to handle actions
+
+    var searchTexture = loader.load('files/microphone.png');
+    searchTexture.minFilter = THREE.LinearFilter;
+    searchTexture.magFilter = THREE.LinearMipMapLinearFilter;
     var search = new THREE.Mesh( new THREE.PlaneGeometry( 364, 500 ), 
-        new THREE.MeshBasicMaterial( { map: loader.load('microphone.png') } ));
+        new THREE.MeshBasicMaterial( { map: searchTexture } ));
     search.isSearch = true; // to handle actions
 
     back.rotateY(25 / 360 * PI);
@@ -134,6 +145,8 @@ function renderHome(tracks) {
             // Load track image or avatar url if none
             imageUrl = ( !!track.artwork_url ) ? track.artwork_url : track.user.avatar_url;
             texture = loader.load( imageUrl );
+            texture.minFilter = THREE.LinearFilter;
+            texture.anisotropy = maxAnisotropy;
 
             material = new THREE.MeshBasicMaterial( { map: texture } );
             // material.side(THREE.DoubleSide);
@@ -165,6 +178,8 @@ function renderTrack(track) {
     // Track scene rendering
     scene = new THREE.Scene();
 
+    scene.add( new THREE.AmbientLight( 0xffffff, 0.5 ) );
+
     if(!camera)
         camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
 
@@ -177,19 +192,12 @@ function renderTrack(track) {
     imageUrl = ( !!track.artwork_url ) ? track.artwork_url : track.user.avatar_url;
     texture = loader.load( imageUrl );
 
-    // material = new THREE.MeshBasicMaterial( { map: texture } );
-
-    // geometry = new THREE.PlaneGeometry( 500, 500 );
-    // mesh = new THREE.Mesh( geometry, material );
-
-    // mesh.translateZ( -3000 );
-
     //Navigation icons
     var back = new THREE.Mesh( new THREE.PlaneGeometry( 500, 500 ), 
-        new THREE.MeshBasicMaterial( { map: loader.load('back.png') } ));
+        new THREE.MeshBasicMaterial( { map: loader.load('files/back.png') } ));
     back.isBack = true; // to handle actions
     var search = new THREE.Mesh( new THREE.PlaneGeometry( 364, 500 ), 
-        new THREE.MeshBasicMaterial( { map: loader.load('microphone.png') } ));
+        new THREE.MeshBasicMaterial( { map: loader.load('files/microphone.png') } ));
     search.isSearch = true; // to handle actions
 
     back.rotateY(25 / 360 * PI);
@@ -211,6 +219,8 @@ function renderTrack(track) {
 
     if(!!window.chrome)
         trackPlayGroup.add(search);
+
+    generate3dModels(track.tag_list);
 
     scene.remove( tracksGroup );
     scene.add( trackPlayGroup );
@@ -248,6 +258,49 @@ function renderTrack(track) {
     
 }
 
+/**
+* Adds 3d models to scene depending on local 3d models and tracks tags content
+*/
+function generate3dModels(tags) {
+    var trackTags = tags.toLowerCase();
+    console.log(trackTags)
+    var tagModels = [
+    {'tag':'synthesiser', 'file': 'files/synth.dae'},
+    {'tag': 'piano', 'file': 'files/piano.dae'},
+    {'tag': 'electronic', 'file': 'files/computer.dae'}
+    ];
+
+    var loader = new THREE.ColladaLoader();
+
+    tagModels.forEach(function(tag) {
+        //if track containes tag, load 3d model
+        if( trackTags.search(tag.tag) != -1) {
+            loader.load(tag.file, function ( collada ) {
+
+                if(tag.tag == 'synthesiser')
+                    collada.scene.position.z = -200;
+                else
+                    collada.scene.position.z = -10;
+
+                collada.scene.position.x = Math.random() * 30 - 15; 
+                collada.scene.position.y = 3;
+                var directionalLight = new THREE.DirectionalLight( 0xcccccc, 0.6 );
+                directionalLight.position.set( 0, 10, 0);
+                directionalLight.position.normalize();
+                collada.scene.add(directionalLight);
+                collada.scene.rotateX(Math.PI/4 );
+                collada.scene.rotateY(Math.PI/4 * Math.random());
+
+                trackPlayGroup.add( collada.scene );
+            }, function ( xhr ) {
+                console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+            });
+        }
+    });
+
+    
+}
+
 var splineObject, points;
 var curveIndex = 0;
 function drawFrequencyCurve() {
@@ -263,12 +316,12 @@ function drawFrequencyCurve() {
         points[i] = new THREE.Vector3(i * 20, 3000 * dataArray[i] / (analyser.maxDecibels - analyser.minDecibels), -5000 - 80 * curveIndex);
     }
 
-    var curve = new THREE.SplineCurve3(points);
+    var curve = new THREE.CatmullRomCurve3(points);
 
     geometry = new THREE.Geometry();
     geometry.vertices = curve.getPoints( bufferLength);
 
-    var material = new THREE.LineBasicMaterial( { color : (0xf0f0f0 - curveIndex - Math.random()) } );
+    var material = new THREE.LineBasicMaterial( { color : (0xf0f0f0 - curveIndex - Math.random() * 2) } );
 
     //Create the final Object3d to add to the scene
     splineObject = new THREE.Line( geometry, material );
@@ -276,8 +329,12 @@ function drawFrequencyCurve() {
     splineObject.translateX(-20 * bufferLength / 3);
     curvesGroup.add(splineObject);
     curvesGroup.translateZ(80);
-
     curveIndex++;
+
+    // Removes need to animate non visible curves, critical performance wise
+    if(curveIndex > 200) {
+        curvesGroup.remove(curvesGroup.children.shift());
+    } 
 }
 
 
@@ -451,6 +508,7 @@ function toggleStereoF() {
 
         render();
         requestFullscreen();
+        screen.orientation.lock('landscape'); // needs to be fullscreen first
 
     } else {
         toggleStereo = false;
@@ -519,13 +577,14 @@ function getOrientation() {
 function setGroupOrientation(event, group) {
     var alpha    = THREE.Math.degToRad(event.alpha); // Z
     var gamma    = THREE.Math.degToRad(event.gamma - 90); // Y, shift to center
+    var beta = THREE.Math.degToRad(event.beta);
 
     if(-gamma < PI/2) {
-        group.rotation.z = 0;
+        group.rotation.z = -beta;
         group.rotation.x  = -gamma;
         group.rotation.y = -alpha;
     } else {
-        group.rotation.z = PI;
+        group.rotation.z = - PI - beta;
         group.rotation.x  = -gamma;
         group.rotation.y = alpha;
     }
@@ -535,10 +594,12 @@ function setGroupOrientation(event, group) {
 function handleOrientation(event) {
 
     if(!!trackPlayGroup && toggleTrack && mobilecheck()) {
-        setGroupOrientation(trackPlayGroup);
+        setGroupOrientation(event, trackPlayGroup);
+        if(toggleStereo) pickOnMove();
     }
     if(!!tracksGroup && !toggleTrack && mobilecheck())   {
-        setGroupOrientation(tracksGroup);
+        setGroupOrientation(event, tracksGroup);
+        if(toggleStereo) pickOnMove();
     } 
 
 }
@@ -571,7 +632,6 @@ document.body.addEventListener("click", function() {
 
     if(mobilecheck()) {
         console.log('shouldbe mobile')
-        screen.orientation.lock('landscape-primary');
         toggleStereoF();
     }
 
