@@ -34,6 +34,10 @@ var fovVer = 40;
 var toggleStereo = false;
 var toggleTrack = false;
 
+var pickInterval;
+
+ambientLight = new THREE.AmbientLight( 0xffffff, 1 )
+
 // Web audio context
 var source;
 var context = new ( window.AudioContext || window.webkitAudioContext );
@@ -47,16 +51,16 @@ if(window.chrome) {
     recognition.start();
     recognition.stop(); // to toggle permission
 
-    recognition.onspeechend = function() {
-      recognition.stop();
-  }
+    recognition.onspeechend = function() {  
+        recognition.stop();
+    }
 
-  recognition.onresult = function(event) {
-      var voiceResult = event.results[0][0].transcript;
-      console.log(voiceResult);
-      if(!!voiceResult)
-        querySoundcloud(voiceResult);
-}   
+    recognition.onresult = function(event) {
+        var voiceResult = event.results[0][0].transcript;
+        console.log(voiceResult);
+        if(!!voiceResult)
+            querySoundcloud(voiceResult);
+    }   
 }
 
 
@@ -89,12 +93,75 @@ function removeCursor() {
     scene.remove(cursor);
 }
 
+
+function renderLimits(group) {
+    // Generates a 2D canvas gradient that can be mapped to a texture
+    var canvas = document.createElement( 'canvas' );
+    canvas.width = 128;
+    canvas.height = 128;
+    var context = canvas.getContext( '2d' );
+    var gradient = context.createLinearGradient( 0, 0, canvas.width * 1.5, 0 );
+    gradient.addColorStop( 0, 'rgba(0,0,0,1)' );
+    gradient.addColorStop( 1, 'rgba(128,0,0,1)' );
+    context.fillStyle = gradient;
+    context.fillRect( 0, 0, canvas.width, canvas.height );
+    var shadowTexture = new THREE.Texture( canvas );
+    shadowTexture.needsUpdate = true;
+
+    // material
+    var gradMat = new THREE.MeshBasicMaterial( { map: shadowTexture, transparent: true } );
+
+    //sides
+    var gradGeo = new THREE.PlaneGeometry( 1000, window.innerHeight * 200);
+
+    //top/bottom
+    // var gradGfeo = new THREE.PlaneGeometry( 500, 500 );
+
+    // mesh
+    var lMesh = new THREE.Mesh( gradGeo, gradMat );
+    lMesh.rotateY( -145 / 360 * PI );
+    lMesh.translateZ(-3000);
+
+    var rMesh = new THREE.Mesh(gradGeo , gradMat );
+
+    rMesh.rotateY( 145 / 360 * PI );
+    rMesh.translateZ(-3000);
+    rMesh.rotateZ(PI); 
+
+    var topMesh = new THREE.Mesh(gradGeo , gradMat );
+
+    topMesh.rotateX( 90 / 360 * PI );
+    topMesh.translateZ(-3000);
+    topMesh.rotateZ(PI/2); 
+
+    var bottomMesh = new THREE.Mesh(gradGeo , gradMat );
+
+    bottomMesh.rotateX( -100 / 360 * PI );
+    bottomMesh.translateZ(-3000);
+    bottomMesh.rotateZ(-PI/2); 
+
+    group.add( lMesh );
+    group.add( rMesh );
+    group.add( topMesh );
+    group.add( bottomMesh );
+}
+
 function renderHome(tracks) {
     toggleTrack = false;
 
     scene = new THREE.Scene();
 
-    camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
+    camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1.0, 10000.0 );
+
+    scene.add(ambientLight);
+
+    var lightInter = setInterval(function() {
+        if(ambientLight.intensity  <= 1) {
+            ambientLight.intensity += 0.075;
+        } else {
+            clearInterval(lightInter);
+        }
+    }, 33);
 
     var imageUrl = '';
     var geometry, mesh, material, texture;
@@ -106,15 +173,17 @@ function renderHome(tracks) {
     var backTexture = loader.load('files/back.png');
     backTexture.minFilter = THREE.LinearFilter;
     backTexture.magFilter = THREE.LinearMipMapLinearFilter;
+    backTexture.anisotropy = renderer.getMaxAnisotropy();
     var back = new THREE.Mesh( new THREE.PlaneGeometry( 500, 500 ), 
-        new THREE.MeshBasicMaterial( { map: backTexture } ));
+        new THREE.MeshPhongMaterial( { map: backTexture } ));
     back.isBack = true; // to handle actions
 
     var searchTexture = loader.load('files/microphone.png');
     searchTexture.minFilter = THREE.LinearFilter;
     searchTexture.magFilter = THREE.LinearMipMapLinearFilter;
+    searchTexture.anisotropy = maxAnisotropy;
     var search = new THREE.Mesh( new THREE.PlaneGeometry( 364, 500 ), 
-        new THREE.MeshBasicMaterial( { map: searchTexture } ));
+        new THREE.MeshPhongMaterial( { map: searchTexture } ));
     search.isSearch = true; // to handle actions
 
     back.rotateY(25 / 360 * PI);
@@ -132,6 +201,8 @@ function renderHome(tracks) {
     if(!!window.chrome)
         tracksGroup.add(search);
 
+    renderLimits(tracksGroup);
+
     scene.add( tracksGroup );
 
     var track;
@@ -148,7 +219,7 @@ function renderHome(tracks) {
             texture.minFilter = THREE.LinearFilter;
             texture.anisotropy = maxAnisotropy;
 
-            material = new THREE.MeshBasicMaterial( { map: texture } );
+            material = new THREE.MeshPhongMaterial( { map: texture } );
             // material.side(THREE.DoubleSide);
 
             geometry = new THREE.PlaneGeometry( 500, 500 );
@@ -169,7 +240,6 @@ function renderHome(tracks) {
     render();
     window.addEventListener("mousemove", onMouseMoveHome); 
     window.addEventListener('deviceorientation', handleOrientation);
-
 } 
 
 function renderTrack(track) {
@@ -178,7 +248,19 @@ function renderTrack(track) {
     // Track scene rendering
     scene = new THREE.Scene();
 
-    scene.add( new THREE.AmbientLight( 0xffffff, 0.5 ) );
+    scene.add( ambientLight );
+
+    var lightIndex = 1;
+
+    var lightInter = setInterval(function() {
+        console.log('IN Ligh')
+        if(lightIndex <= 1) {
+            ambientLight.intensity = lightIndex;
+        } else {
+            clearInterval(lightInter);
+        }
+        lightIndex += 0.075;
+    }, 33);
 
     if(!camera)
         camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 10000 );
@@ -194,10 +276,10 @@ function renderTrack(track) {
 
     //Navigation icons
     var back = new THREE.Mesh( new THREE.PlaneGeometry( 500, 500 ), 
-        new THREE.MeshBasicMaterial( { map: loader.load('files/back.png') } ));
+        new THREE.MeshPhongMaterial( { map: loader.load('files/back.png') } ));
     back.isBack = true; // to handle actions
     var search = new THREE.Mesh( new THREE.PlaneGeometry( 364, 500 ), 
-        new THREE.MeshBasicMaterial( { map: loader.load('files/microphone.png') } ));
+        new THREE.MeshPhongMaterial( { map: loader.load('files/microphone.png') } ));
     search.isSearch = true; // to handle actions
 
     back.rotateY(25 / 360 * PI);
@@ -236,7 +318,9 @@ function renderTrack(track) {
         console.log('loading request')
         // DSP should all be done here as JS is asynchronous
         context.decodeAudioData(request.response, function(buffer) {
-            console.log(buffer);
+            if(!!source)
+                source.stop();
+
             source = context.createBufferSource();
             source.buffer = buffer;
             source.connect( analyser );
@@ -255,7 +339,6 @@ function renderTrack(track) {
     window.addEventListener("mousemove", onMouseMoveTrack);
     if(toggleStereo) renderCursor();
     window.addEventListener('deviceorientation', handleOrientation);
-    
 }
 
 /**
@@ -263,7 +346,7 @@ function renderTrack(track) {
 */
 function generate3dModels(tags) {
     var trackTags = tags.toLowerCase();
-    console.log(trackTags)
+
     var tagModels = [
     {'tag':'synthesiser', 'file': 'files/synth.dae'},
     {'tag': 'piano', 'file': 'files/piano.dae'},
@@ -342,6 +425,49 @@ var cursorAnimationInterval;
 var animationIndex = 1;
 var previousObject;
 
+var track;
+
+function animateToAction(mesh) {
+
+    animationIndex += 0.05;
+    cursor.position.z = -2000 * 1 / animationIndex;
+    cursor.material.opacity = 1 / (animationIndex + 0.5);
+
+    mesh.translateZ(-10);
+    console.log('Animate to play')
+    console.log(animationIndex);
+    if(animationIndex > Math.round(7))  {
+        console.log('PLAY')
+        cancelAnimationFrame( cursorAnimationInterval );
+        animationIndex = 1;
+        var lightIndex = 1;
+        clearInterval(pickInterval);
+
+        var lightInter = setInterval(function() {
+            if(lightIndex > 0) {
+                ambientLight.intensity = lightIndex;
+            } else {
+                clearInterval(lightInter);
+
+                if(!!mesh.track && !toggleTrack) {
+                    renderTrack(mesh.track);
+                } else {
+                    // is navigation action
+                    if(mesh.isBack) 
+                        querySoundcloud('erased tapes');
+                }
+                pickInterval = setInterval(pickOnMove, 100);
+
+            }
+            lightIndex -= 0.075;
+        }, 33);
+
+        if(mesh.isSearch)
+            recognition.start();
+    }
+    cursorAnimationInterval = requestAnimationFrame(function() {animateToAction(mesh)});
+}
+
 function pickOnMove() {
     raycaster.setFromCamera( new THREE.Vector2(0, 0), camera );
     if(toggleTrack) 
@@ -351,55 +477,46 @@ function pickOnMove() {
     
     if(intersects.length > 0) {
         var mesh = intersects[0].object;
-        
-        var track = mesh.track;
-        clearInterval( cursorAnimationInterval );
 
-        previousObject = mesh;
+        if(!!mesh.track || mesh.isSearch || mesh.isBack) {
+            if(mesh != previousObject) {
 
-        cursor.position.z = -2000;
-        cursor.material.transparent = true;
-        cursor.material.opacity = 1;
+                cursor.position.z = -2000;
+                cursor.material.transparent = true;
+                cursor.material.opacity = 1;
 
-        cursorAnimationInterval = setInterval(function() {
+                cursorAnimationInterval = requestAnimationFrame(function(){animateToAction(mesh)});
+                previousObject = mesh;
+            } 
 
-            animationIndex += 0.05;
-            cursor.position.z = -2000 * 1 / animationIndex;
-            cursor.material.opacity = 1 / (animationIndex + 0.5);
+            
+        } else {
 
-            mesh.translateZ(-10);
+            cancelAnimationFrame( cursorAnimationInterval );
 
-            if(animationIndex > Math.round(6))  {
-                clearInterval( cursorAnimationInterval );
-                animationIndex = 1;
-                if(!!mesh.track && !toggleTrack) {
-                    console.log('PLAY TRACK')
-                    renderTrack(track);
-                } else {
-                    // is navigation action
-                    if(mesh.isBack)  
-                        querySoundcloud('erased tapes')
-                    
-                    if(mesh.isSearch)
-                        recognition.start();
-                }
+            //Restore everything
+            if(!!previousObject) {
+                previousObject.translateZ( (animationIndex - 1) / 0.05 * 10 );
             }
 
-        }, 30);
-
-        
+            animationIndex = 1;
+            cursor.material.opacity = 1;
+            cursor.position.z = -4000;
+            previousObject = undefined; 
+        }
 
     } else {
-        clearInterval( cursorAnimationInterval );
+        cancelAnimationFrame( cursorAnimationInterval );
 
         //Restore everything
-        if(!!previousObject)
+        if(!!previousObject) {
             previousObject.translateZ( (animationIndex - 1) / 0.05 * 10 );
+        }
 
         animationIndex = 1;
+        cursor.material.opacity = 1;
         cursor.position.z = -4000;
         previousObject = undefined; 
-
     }
 }
 
@@ -416,7 +533,7 @@ function windowResize(){
 }
 
 // Should only be called in home
-var mouseScreenRatioY = 0, mouseScreenRatioX = 0, offset = 10;
+var mouseScreenRatioY = 0, mouseScreenRatioX = 0, offset = 0;
 function onMouseMoveHome(event) {
 
     mouseScreenRatioY = 2 * event.clientX / window.innerWidth - 1; 
@@ -427,20 +544,17 @@ function onMouseMoveHome(event) {
 
         // /vert mouse X position between -PI/3 and PI/3 for horizontal rotation (120˚ FOV) 
         // has been optimized/factorized from prevision, formula might seem odd
-        tracksGroup.rotation.y =  mouseScreenRatioY * (2 * (fovHor + offset)) / 360 * PI;
+        tracksGroup.rotation.y =  mouseScreenRatioY * (1 * (fovHor + offset)) / 360 * PI;
         
         // Convert mouse Y position between -PI/2 and PI/2 for vertical rotation (90˚ FOV)
         // has been optimized/factorized from prevision, formula might seem odd
-        tracksGroup.rotation.x =  mouseScreenRatioX * (2 * (fovVer + offset)) / 360 * PI;
+        tracksGroup.rotation.x =  mouseScreenRatioX * (1 * (fovVer + offset)) / 360 * PI;
 
     }
 
     // Update mouse coordinates
     mouse.x = mouseScreenRatioY;
     mouse.y = - mouseScreenRatioX;
-
-    if(toggleStereo)
-        pickOnMove();
 
 }
 
@@ -456,8 +570,6 @@ function onMouseMoveTrack(event) {
     mouse.x = mouseScreenRatioY;
     mouse.y = - mouseScreenRatioX;
 
-    if(toggleStereo)
-        pickOnMove();
 }
 
 window.addEventListener("click", function() {
@@ -473,18 +585,29 @@ window.addEventListener("click", function() {
 
         var mesh = intersects[0].object;
 
-        if(!!mesh.track && !toggleTrack) {
-            var track = mesh.track;
+        var lightIndex = 1;
 
-            renderTrack( track );
-        } else {
-            // is navigation action
-            if(mesh.isBack) 
-                querySoundcloud('erased tapes');
+        var lightInter = setInterval(function() {
+            if(lightIndex > 0) {
+                ambientLight.intensity = lightIndex;
+            } else {
+                clearInterval(lightInter);
+                if(!!mesh.track && !toggleTrack) {
+                    var track = mesh.track;
 
-            if(mesh.isSearch)
-                recognition.start();
-        }
+                    renderTrack(track);
+
+                } else {
+                    // is navigation action
+                    if(mesh.isBack) 
+                        querySoundcloud('erased tapes');
+                }
+            }
+            lightIndex -= 0.075;
+        }, 33);
+
+        if(mesh.isSearch)
+            recognition.start();
 
     }
 
@@ -506,9 +629,15 @@ function toggleStereoF() {
         
         renderCursor();
 
-        render();
         requestFullscreen();
-        screen.orientation.lock('landscape'); // needs to be fullscreen first
+        screen.orientation.lock('landscape-secondary'); // needs to be fullscreen first
+
+        render();   
+
+        setTimeout(function() {
+            pickInterval = setInterval(pickOnMove, 100);
+
+        }, 100);
 
     } else {
         toggleStereo = false;
@@ -523,6 +652,8 @@ function toggleStereoF() {
         exitFullscreen();
 
         render();
+
+        clearInterval(pickInterval);
     }
 }
 
@@ -575,19 +706,15 @@ function getOrientation() {
 * Rotation direction inverted and Z rot as gamma passes from 0 to PI on horizon
 */
 function setGroupOrientation(event, group) {
-    var alpha    = THREE.Math.degToRad(event.alpha); // Z
-    var gamma    = THREE.Math.degToRad(event.gamma - 90); // Y, shift to center
-    var beta = THREE.Math.degToRad(event.beta);
+    var alpha    = THREE.Math.degToRad(event.alpha); // y
+    var gamma    = THREE.Math.degToRad(event.gamma); // x
+    var beta = THREE.Math.degToRad(event.beta); // z
 
-    if(-gamma < PI/2) {
-        group.rotation.z = -beta;
-        group.rotation.x  = -gamma;
-        group.rotation.y = -alpha;
-    } else {
-        group.rotation.z = - PI - beta;
-        group.rotation.x  = -gamma;
-        group.rotation.y = alpha;
-    }
+    // must invert directions and handle orientation inversion on high sight
+    group.rotation.z = (gamma < 0) ? beta + PI : -beta;
+    group.rotation.y = (gamma < 0) ? (-alpha-PI) : (-alpha);
+    group.rotation.x = (gamma < 0) ? -gamma-PI/2 : -gamma+PI/2;
+
 }
 
 //Called on change
@@ -595,11 +722,9 @@ function handleOrientation(event) {
 
     if(!!trackPlayGroup && toggleTrack && mobilecheck()) {
         setGroupOrientation(event, trackPlayGroup);
-        if(toggleStereo) pickOnMove();
     }
     if(!!tracksGroup && !toggleTrack && mobilecheck())   {
         setGroupOrientation(event, tracksGroup);
-        if(toggleStereo) pickOnMove();
     } 
 
 }
@@ -613,7 +738,7 @@ function querySoundcloud(query) {
     }).then(function(tracks){
 
         renderHome(tracks);
-        // renderTrack(tracks[0])
+
         if(!!source) source.stop();
         if(toggleStereo) renderCursor();
 
